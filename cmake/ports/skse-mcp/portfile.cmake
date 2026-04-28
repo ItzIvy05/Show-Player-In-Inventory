@@ -1,0 +1,13 @@
+# header-only library
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO QTR-Modding/SKSE-MCP
+    REF e3b55a2b6a1b086d294339aa8c00bb9e149afd11
+    SHA512 dab191566aac91ecd6918f55973a51e77f457e67661dee4bcbb193419403fbc4129a6042b92dc12cc7fd3f6314b3ed4f383aea84e67a280ad779bcba6403703c
+    HEAD_REF main
+)
+
+# Install codes
+set(SKSEMCP_SOURCE	${SOURCE_PATH}/include/SKSEMCP)
+file(INSTALL ${SKSEMCP_SOURCE} DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")

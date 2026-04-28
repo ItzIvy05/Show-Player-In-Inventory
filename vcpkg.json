@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "ivy-show-player-in-menus",
+  "version-string": "1.0.0.0",
+  "dependencies": [
+    "fast-cpp-csv-parser",
+    "rsm-binary-io",
+    "spdlog",
+    "xbyak",
+    "rapidcsv",
+    "clib-util",
+    "clib-utils-qtr",
+    "directxtk",
+    "skse-mcp"
+  ],
+  "overrides": [
+    {
+      "name": "fmt",
+      "version": "9.1.0"
+    }
+  ],
+  "builtin-baseline": "74e6536215718009aae747d86d84b78376bf9e09"
+}
