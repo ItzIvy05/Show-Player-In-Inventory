@@ -185,8 +185,8 @@ namespace Settings
         file << "fFOV = " << fov << "\n";
     }
 
-    bool IsInventoryMenu(const RE::BSFixedString& menuName)
+    bool IsWatchedMenu(const RE::BSFixedString& menuName)
     {
-        return menuName == RE::InventoryMenu::MENU_NAME;
+        return menuName == RE::InventoryMenu::MENU_NAME || menuName == RE::MagicMenu::MENU_NAME;
     }
 }

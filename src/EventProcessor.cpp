@@ -58,27 +58,27 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    if (inventoryOpen) {
+    if (menuOpen) {
         QueueVanillaMenuBlurClear();
     }
 
-    if (!Settings::IsInventoryMenu(event->menuName)) {
+    if (!Settings::IsWatchedMenu(event->menuName)) {
         return RE::BSEventNotifyControl::kContinue;
     }
 
     if (event->opening) {
-        inventoryOpen = true;
-        logger::info("[EventProcessor] Inventory Menu opened.");
+        menuOpen = true;
+        logger::info("[EventProcessor] Watched menu opened.");
         QueueVanillaMenuBlurClear();
         ApplyLiveSettings();
         QueueVanillaMenuBlurClear();
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    if (inventoryOpen) {
-        logger::info("[EventProcessor] Inventory Menu closed.");
+    if (menuOpen) {
+        logger::info("[EventProcessor] Watched menu closed.");
         MenuCamera::GetSingleton().Stop();
-        inventoryOpen = false;
+        menuOpen = false;
         QueueVanillaMenuBlurClear();
     }
 
@@ -87,7 +87,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
 
 void EventProcessor::ApplyLiveSettings()
 {
-    if (!inventoryOpen) {
+    if (!menuOpen) {
         return;
     }
 
@@ -106,9 +106,4 @@ void EventProcessor::ApplyLiveSettings()
     }
 
     QueueVanillaMenuBlurClear();
-}
-
-bool EventProcessor::IsInventoryOpen() const
-{
-    return inventoryOpen;
 }

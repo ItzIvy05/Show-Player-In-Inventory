@@ -10,10 +10,9 @@ public:
         RE::BSTEventSource<RE::MenuOpenCloseEvent>* source) override;
 
     void ApplyLiveSettings();
-    [[nodiscard]] bool IsInventoryOpen() const;
 
 private:
-    bool inventoryOpen = false;
+    bool menuOpen = false;
 };
 
 extern SKSE::PluginHandle g_pluginHandle;

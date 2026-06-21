@@ -63,16 +63,13 @@ bool MenuCamera::Start()
 
     if (g_SmoothCam && g_SmoothCam->IsCameraEnabled()) {
         const auto result = g_SmoothCam->RequestCameraControl(g_pluginHandle);
-        const auto resultCode = static_cast<std::uint8_t>(result);
-        constexpr std::uint8_t okCode = 0;
-        constexpr std::uint8_t alreadyGivenCode = 3;
 
-        if (resultCode == okCode || resultCode == alreadyGivenCode) {
+        if (result == SmoothCamAPI::APIResult::OK || result == SmoothCamAPI::APIResult::AlreadyGiven) {
             g_SmoothCam->RequestInterpolatorUpdates(g_pluginHandle, true);
             smoothCamControl = true;
             logger::info("[MenuCamera] SmoothCam camera control acquired.");
         } else {
-            logger::warn("[MenuCamera] SmoothCam camera control request failed: {}", resultCode);
+            logger::warn("[MenuCamera] SmoothCam camera control request failed: {}", static_cast<std::uint8_t>(result));
         }
     } else {
         logger::debug("[MenuCamera] SmoothCam API not available or SmoothCam disabled.");
@@ -213,7 +210,6 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
 
     camera->cameraTarget = player;
     previousState = camera->currentState.get();
-    forcedThirdPerson = camera->IsInFirstPerson();
 
     playerAngleX = player->data.angle.x;
     playerAngleZ = player->data.angle.z;
@@ -302,5 +298,4 @@ void MenuCamera::ResetSavedState()
     previousState = nullptr;
     active = false;
     smoothCamControl = false;
-    forcedThirdPerson = false;
 }

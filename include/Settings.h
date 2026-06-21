@@ -17,5 +17,5 @@ namespace Settings
     void Load(bool force = false);
     void Save();
     [[nodiscard]] std::filesystem::path GetINIPath();
-    [[nodiscard]] bool IsInventoryMenu(const RE::BSFixedString& menuName);
+    [[nodiscard]] bool IsWatchedMenu(const RE::BSFixedString& menuName);
 }
