@@ -45,6 +45,7 @@ private:
 
     bool active = false;
     bool smoothCamControl = false;
+    bool wasFirstPerson = false;
     bool headtrackingEnabled = false;
     bool headTrackSpineEnabled = false;
     bool eyeTrackingEnabled = false;

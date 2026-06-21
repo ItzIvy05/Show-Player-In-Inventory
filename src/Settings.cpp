@@ -112,9 +112,9 @@ namespace Settings
         fov = 60.0f;
     }
 
-    void Load(bool force)
+    void Load()
     {
-        if (loaded && !force) {
+        if (loaded) {
             return;
         }
 

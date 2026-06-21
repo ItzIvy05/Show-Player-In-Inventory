@@ -14,7 +14,7 @@ namespace Settings
     inline float fov = 60.0f;
 
     void SetDefaults();
-    void Load(bool force = false);
+    void Load();
     void Save();
     [[nodiscard]] std::filesystem::path GetINIPath();
     [[nodiscard]] bool IsWatchedMenu(const RE::BSFixedString& menuName);

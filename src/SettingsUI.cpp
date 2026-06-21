@@ -95,14 +95,6 @@ namespace SettingsUI
 
         ImGuiMCP::SameLine(0.0f, 14.0f);
 
-        if (ImGuiMCP::Button("Reload Settings")) {
-            Settings::Load(true);
-            cameraChanged = true;
-        }
-        HelpMarker("Reloads values from the INI and applies them immediately if the inventory menu is open.");
-
-        ImGuiMCP::SameLine(0.0f, 14.0f);
-
         if (ImGuiMCP::Button("Reset Defaults")) {
             Settings::SetDefaults();
             cameraChanged = true;

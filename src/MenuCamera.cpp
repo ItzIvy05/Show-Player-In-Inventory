@@ -48,8 +48,18 @@ bool MenuCamera::Start()
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
 
-    if (!player || !camera || !CaptureINISettings()) {
-        logger::warn("[MenuCamera] Could not start. Missing player, camera, or INI camera settings.");
+    if (!player || !camera) {
+        logger::warn("[MenuCamera] Could not start. Missing player or camera.");
+        return false;
+    }
+
+    if (player->IsInCombat() || player->IsOnMount()) {
+        logger::info("[MenuCamera] Skipped start. Player is in combat or on horseback.");
+        return false;
+    }
+
+    if (!CaptureINISettings()) {
+        logger::warn("[MenuCamera] Could not start. Missing INI camera settings.");
         return false;
     }
 
@@ -108,7 +118,9 @@ void MenuCamera::Stop()
         logger::info("[MenuCamera] SmoothCam camera control released.");
     }
 
-    if (previousState) {
+    if (wasFirstPerson) {
+        camera->ForceFirstPerson();
+    } else if (previousState) {
         camera->SetState(previousState);
     }
 
@@ -210,6 +222,7 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
 
     camera->cameraTarget = player;
     previousState = camera->currentState.get();
+    wasFirstPerson = camera->IsInFirstPerson();
 
     playerAngleX = player->data.angle.x;
     playerAngleZ = player->data.angle.z;
@@ -298,4 +311,5 @@ void MenuCamera::ResetSavedState()
     previousState = nullptr;
     active = false;
     smoothCamControl = false;
+    wasFirstPerson = false;
 }
