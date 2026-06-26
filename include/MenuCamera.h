@@ -22,7 +22,6 @@ private:
     RE::Setting* mouseWheelZoomSpeed = nullptr;
     RE::Setting* togglePOVDelay = nullptr;
 
-    RE::TESCameraState* previousState = nullptr;
     RE::NiPoint2 freeRotation{};
     RE::NiPoint3 posOffsetExpected{};
 

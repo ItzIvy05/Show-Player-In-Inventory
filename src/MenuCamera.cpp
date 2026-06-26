@@ -120,8 +120,8 @@ void MenuCamera::Stop()
 
     if (wasFirstPerson) {
         camera->ForceFirstPerson();
-    } else if (previousState) {
-        camera->SetState(previousState);
+    } else {
+        camera->ForceThirdPerson();
     }
 
     player->data.angle.x = playerAngleX;
@@ -221,7 +221,6 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
     }
 
     camera->cameraTarget = player;
-    previousState = camera->currentState.get();
     wasFirstPerson = camera->IsInFirstPerson();
 
     playerAngleX = player->data.angle.x;
@@ -308,7 +307,6 @@ void MenuCamera::ResetSavedState()
     vanityModeMaxDist = nullptr;
     mouseWheelZoomSpeed = nullptr;
     togglePOVDelay = nullptr;
-    previousState = nullptr;
     active = false;
     smoothCamControl = false;
     wasFirstPerson = false;
