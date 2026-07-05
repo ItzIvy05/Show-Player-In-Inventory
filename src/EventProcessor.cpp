@@ -85,6 +85,52 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
     return RE::BSEventNotifyControl::kContinue;
 }
 
+RE::BSEventNotifyControl EventProcessor::ProcessEvent(
+    RE::InputEvent* const* event,
+    RE::BSTEventSource<RE::InputEvent*>*)
+{
+    if (!event || !MenuCamera::GetSingleton().IsActive()) {
+        rotating = false;
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    for (auto* current = *event; current; current = current->next) {
+        if (const auto* button = current->AsButtonEvent()) {
+            std::uint32_t code = button->GetIDCode();
+
+            switch (button->device.get()) {
+            case RE::INPUT_DEVICE::kMouse:
+                code += SKSE::InputMap::kMacro_MouseButtonOffset;
+                break;
+
+            case RE::INPUT_DEVICE::kGamepad:
+                code = SKSE::InputMap::GamepadMaskToKeycode(code);
+                break;
+
+            default:
+                break;
+            }
+
+            if (code == Settings::rotateKey) {
+                rotating = button->Value() > 0.0f;
+            }
+
+            continue;
+        }
+
+        if (const auto* move = current->AsMouseMoveEvent(); move && rotating) {
+            MenuCamera::GetSingleton().Rotate(static_cast<float>(move->mouseInputX));
+            continue;
+        }
+
+        if (const auto* stick = current->AsThumbstickEvent(); stick && rotating && stick->IsRight()) {
+            MenuCamera::GetSingleton().Rotate(stick->xValue * 5.0f);
+        }
+    }
+
+    return RE::BSEventNotifyControl::kContinue;
+}
+
 void EventProcessor::ApplyLiveSettings()
 {
     if (!menuOpen) {

@@ -32,6 +32,13 @@ namespace
                 logger::warn("[IvyShowPlayerInMenus] Could not register menu watcher.");
             }
 
+            if (auto* input = RE::BSInputDeviceManager::GetSingleton()) {
+                input->AddEventSink<RE::InputEvent*>(&EventProcessor::GetSingleton());
+                logger::info("[IvyShowPlayerInMenus] Registered rotation input watcher.");
+            } else {
+                logger::warn("[IvyShowPlayerInMenus] Could not register rotation input watcher.");
+            }
+
             break;
 
         default:

@@ -8,6 +8,7 @@ public:
     bool Start();
     void Stop();
     void ApplySettings();
+    void Rotate(float deltaX);
     [[nodiscard]] bool IsActive() const;
 
 private:

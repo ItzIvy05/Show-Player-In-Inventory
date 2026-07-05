@@ -209,6 +209,30 @@ void MenuCamera::ApplySettings()
     logger::info("[MenuCamera] Applied live settings. offsetX={} offsetY={} offsetZ={} fov={}", Settings::offsetX, Settings::offsetY, Settings::offsetZ, Settings::fov);
 }
 
+void MenuCamera::Rotate(float deltaX)
+{
+    if (!active) {
+        return;
+    }
+
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    auto* camera = RE::PlayerCamera::GetSingleton();
+    if (!player || !camera) {
+        return;
+    }
+
+    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
+    if (!thirdState) {
+        return;
+    }
+
+    const float delta = deltaX * 0.01f;
+    player->data.angle.z -= delta;
+    thirdState->freeRotation.x += delta;
+    camera->Update();
+    player->Update3DPosition(true);
+}
+
 bool MenuCamera::IsActive() const
 {
     return active;

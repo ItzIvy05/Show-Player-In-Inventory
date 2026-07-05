@@ -12,6 +12,7 @@ namespace Settings
     inline float offsetZ = -20.0f;
     inline constexpr float distance = 145.0f;
     inline float fov = 60.0f;
+    inline std::uint32_t rotateKey = 258;
 
     void SetDefaults();
     void Load();

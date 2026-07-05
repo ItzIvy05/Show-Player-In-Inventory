@@ -68,6 +68,14 @@ namespace
             return;
         }
 
+        if (section == "CONTROLS") {
+            if (key == "IROTATEKEY") {
+                Settings::rotateKey = static_cast<std::uint32_t>(ParseFloat(value, static_cast<float>(Settings::rotateKey)));
+            }
+
+            return;
+        }
+
         if (section != "CAMERA") {
             return;
         }
@@ -110,6 +118,7 @@ namespace Settings
         offsetY = -12.0f;
         offsetZ = -20.0f;
         fov = 60.0f;
+        rotateKey = 258;
     }
 
     void Load()
@@ -182,7 +191,9 @@ namespace Settings
         file << "fOffsetX = " << offsetX << "\n";
         file << "fOffsetY = " << offsetY << "\n";
         file << "fOffsetZ = " << offsetZ << "\n";
-        file << "fFOV = " << fov << "\n";
+        file << "fFOV = " << fov << "\n\n";
+        file << "[Controls]\n";
+        file << "iRotateKey = " << rotateKey << "\n";
     }
 
     bool IsWatchedMenu(const RE::BSFixedString& menuName)
