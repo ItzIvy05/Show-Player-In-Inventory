@@ -138,6 +138,12 @@ namespace SettingsUI
         }
         HelpMarker("Toggles Show Player In Inventory ON and OFF.");
 
+        bool barterEnabled = Settings::barterEnabled;
+        if (ImGuiMCP::Checkbox("Barter Menu", &barterEnabled)) {
+            Settings::barterEnabled = barterEnabled;
+        }
+        HelpMarker("Shows your character in the barter menu.");
+
         ImGuiMCP::Spacing();
         ImGuiMCP::SeparatorText("CAMERA");
 

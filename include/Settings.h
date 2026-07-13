@@ -7,6 +7,7 @@ namespace Settings
 
     inline bool loaded = false;
     inline bool enabled = true;
+    inline bool barterEnabled = false;
     inline float offsetX = -46.7f;
     inline float offsetY = -12.0f;
     inline float offsetZ = -20.0f;

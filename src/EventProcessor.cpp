@@ -62,12 +62,13 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         QueueVanillaMenuBlurClear();
     }
 
-    if (!Settings::IsWatchedMenu(event->menuName)) {
-        return RE::BSEventNotifyControl::kContinue;
-    }
-
     if (event->opening) {
+        if (!Settings::IsWatchedMenu(event->menuName)) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
         menuOpen = true;
+        activeMenu = event->menuName;
         logger::info("[EventProcessor] Watched menu opened.");
         QueueVanillaMenuBlurClear();
         ApplyLiveSettings();
@@ -75,7 +76,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    if (menuOpen) {
+    if (menuOpen && event->menuName == activeMenu) {
         logger::info("[EventProcessor] Watched menu closed.");
         MenuCamera::GetSingleton().Stop();
         menuOpen = false;

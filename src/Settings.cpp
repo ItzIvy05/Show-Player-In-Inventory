@@ -63,6 +63,8 @@ namespace
         if (section == "GENERAL") {
             if (key == "BENABLE") {
                 Settings::enabled = ParseBool(value, Settings::enabled);
+            } else if (key == "BBARTERMENU") {
+                Settings::barterEnabled = ParseBool(value, Settings::barterEnabled);
             }
 
             return;
@@ -114,6 +116,7 @@ namespace Settings
     void SetDefaults()
     {
         enabled = true;
+        barterEnabled = false;
         offsetX = -46.7f;
         offsetY = -12.0f;
         offsetZ = -20.0f;
@@ -186,7 +189,8 @@ namespace Settings
         }
 
         file << "[General]\n";
-        file << "bEnable = " << (enabled ? 1 : 0) << "\n\n";
+        file << "bEnable = " << (enabled ? 1 : 0) << "\n";
+        file << "bBarterMenu = " << (barterEnabled ? 1 : 0) << "\n\n";
         file << "[Camera]\n";
         file << "fOffsetX = " << offsetX << "\n";
         file << "fOffsetY = " << offsetY << "\n";
@@ -198,6 +202,6 @@ namespace Settings
 
     bool IsWatchedMenu(const RE::BSFixedString& menuName)
     {
-        return menuName == RE::InventoryMenu::MENU_NAME || menuName == RE::MagicMenu::MENU_NAME;
+        return menuName == RE::InventoryMenu::MENU_NAME || menuName == RE::MagicMenu::MENU_NAME || (barterEnabled && menuName == RE::BarterMenu::MENU_NAME);
     }
 }

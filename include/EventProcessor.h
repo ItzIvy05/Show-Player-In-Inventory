@@ -18,6 +18,7 @@ public:
     void ApplyLiveSettings();
 
 private:
+    RE::BSFixedString activeMenu;
     bool menuOpen = false;
     bool rotating = false;
 };
