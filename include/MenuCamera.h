@@ -5,10 +5,13 @@ class MenuCamera
 public:
     static MenuCamera& GetSingleton();
 
+    static void InstallHook();
+
     bool Start();
     void Stop();
     void ApplySettings();
     void Rotate(float deltaX);
+    void EnforceCameraValues(RE::ThirdPersonState* thirdState);
     [[nodiscard]] bool IsActive() const;
 
 private:
@@ -43,6 +46,7 @@ private:
     float savedMouseWheelZoomSpeed = 0.0f;
     float savedTogglePOVDelay = 0.0f;
 
+    bool iniCaptured = false;
     bool active = false;
     bool smoothCamControl = false;
     bool wasFirstPerson = false;

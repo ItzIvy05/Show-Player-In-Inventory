@@ -15,13 +15,11 @@ static void SetupLog()
 
     spdlog::set_default_logger(std::move(log));
 
-#ifndef NDEBUG
-    spdlog::set_level(spdlog::level::trace);
-    spdlog::flush_on(spdlog::level::trace);
-#else
     spdlog::set_level(spdlog::level::info);
     spdlog::flush_on(spdlog::level::info);
-#endif
 
     logger::info("{} {} loaded.", pluginName, SKSE::PluginDeclaration::GetSingleton()->GetVersion());
+
+    spdlog::set_level(spdlog::level::warn);
+    spdlog::flush_on(spdlog::level::warn);
 }

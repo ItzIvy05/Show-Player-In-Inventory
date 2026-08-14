@@ -16,7 +16,7 @@ namespace
             return;
         }
 
-        while (blur->blurCount > 0) {
+        for (std::int32_t i = 0; i < 8 && blur->blurCount > 0; ++i) {
             blur->DecrementBlurCount();
         }
 
@@ -70,9 +70,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         menuOpen = true;
         activeMenu = event->menuName;
         logger::info("[EventProcessor] Watched menu opened.");
-        QueueVanillaMenuBlurClear();
         ApplyLiveSettings();
-        QueueVanillaMenuBlurClear();
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -137,8 +135,6 @@ void EventProcessor::ApplyLiveSettings()
     if (!menuOpen) {
         return;
     }
-
-    QueueVanillaMenuBlurClear();
 
     if (!Settings::enabled) {
         MenuCamera::GetSingleton().Stop();

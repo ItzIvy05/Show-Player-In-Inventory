@@ -7,6 +7,40 @@
 namespace
 {
     constexpr float PI = 3.14159265358979323846f;
+
+    struct ThirdPersonUpdateHook
+    {
+        static void Update(RE::ThirdPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
+        {
+            _Update(a_this, a_nextState);
+            MenuCamera::GetSingleton().EnforceCameraValues(a_this);
+        }
+
+        static inline REL::Relocation<decltype(Update)> _Update;
+    };
+}
+
+void MenuCamera::InstallHook()
+{
+    REL::Relocation<std::uintptr_t> vtbl{ RE::ThirdPersonState::VTABLE[0] };
+    ThirdPersonUpdateHook::_Update = vtbl.write_vfunc(0x3, ThirdPersonUpdateHook::Update);
+    logger::info("[MenuCamera] Installed third person camera update hook.");
+}
+
+void MenuCamera::EnforceCameraValues(RE::ThirdPersonState* thirdState)
+{
+    if (!active || !thirdState) {
+        return;
+    }
+
+    auto* camera = RE::PlayerCamera::GetSingleton();
+    if (!camera) {
+        return;
+    }
+
+    thirdState->posOffsetExpected = thirdState->posOffsetActual =
+        RE::NiPoint3(Settings::offsetX, Settings::offsetY, Settings::offsetZ);
+    camera->worldFOV = Settings::fov;
 }
 
 MenuCamera& MenuCamera::GetSingleton()
@@ -17,6 +51,10 @@ MenuCamera& MenuCamera::GetSingleton()
 
 bool MenuCamera::CaptureINISettings()
 {
+    if (iniCaptured) {
+        return true;
+    }
+
     auto* ini = RE::INISettingCollection::GetSingleton();
     if (!ini) {
         return false;
@@ -33,9 +71,11 @@ bool MenuCamera::CaptureINISettings()
     mouseWheelZoomSpeed = ini->GetSetting("fMouseWheelZoomSpeed:Camera");
     togglePOVDelay = ini->GetSetting("fTogglePOVDelay:Controls");
 
-    return overShoulderCombatPosX && overShoulderCombatAddY && overShoulderCombatPosZ && autoVanityModeDelay &&
-           overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist && mouseWheelZoomSpeed &&
-           togglePOVDelay;
+    iniCaptured = overShoulderCombatPosX && overShoulderCombatAddY && overShoulderCombatPosZ && autoVanityModeDelay &&
+                  overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist &&
+                  mouseWheelZoomSpeed && togglePOVDelay;
+
+    return iniCaptured;
 }
 
 bool MenuCamera::Start()
@@ -69,8 +109,6 @@ bool MenuCamera::Start()
         return false;
     }
 
-    APIs::RequestAPIs();
-
     if (g_SmoothCam && g_SmoothCam->IsCameraEnabled()) {
         const auto result = g_SmoothCam->RequestCameraControl(g_pluginHandle);
 
@@ -102,6 +140,8 @@ void MenuCamera::Stop()
     if (!active) {
         return;
     }
+
+    active = false;
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
@@ -290,7 +330,7 @@ void MenuCamera::ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera
     }
 
     camera->cameraTarget = player;
-    camera->SetState(thirdState);
+    camera->ForceThirdPerson();
 
     thirdState->toggleAnimCam = true;
     thirdState->freeRotationEnabled = true;
@@ -321,16 +361,6 @@ void MenuCamera::ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera
 
 void MenuCamera::ResetSavedState()
 {
-    overShoulderCombatPosX = nullptr;
-    overShoulderCombatAddY = nullptr;
-    overShoulderCombatPosZ = nullptr;
-    autoVanityModeDelay = nullptr;
-    overShoulderPosX = nullptr;
-    overShoulderPosZ = nullptr;
-    vanityModeMinDist = nullptr;
-    vanityModeMaxDist = nullptr;
-    mouseWheelZoomSpeed = nullptr;
-    togglePOVDelay = nullptr;
     active = false;
     smoothCamControl = false;
     wasFirstPerson = false;

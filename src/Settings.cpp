@@ -65,6 +65,8 @@ namespace
                 Settings::enabled = ParseBool(value, Settings::enabled);
             } else if (key == "BBARTERMENU") {
                 Settings::barterEnabled = ParseBool(value, Settings::barterEnabled);
+            } else if (key == "BENABLELOGGING") {
+                Settings::loggingEnabled = ParseBool(value, Settings::loggingEnabled);
             }
 
             return;
@@ -117,11 +119,19 @@ namespace Settings
     {
         enabled = true;
         barterEnabled = false;
+        loggingEnabled = false;
         offsetX = -46.7f;
         offsetY = -12.0f;
         offsetZ = -20.0f;
         fov = 60.0f;
         rotateKey = 258;
+    }
+
+    void ApplyLogLevel()
+    {
+        const auto level = loggingEnabled ? spdlog::level::info : spdlog::level::warn;
+        spdlog::set_level(level);
+        spdlog::flush_on(level);
     }
 
     void Load()
@@ -168,6 +178,8 @@ namespace Settings
             ApplyValue(section, line.substr(0, equals), line.substr(equals + 1));
         }
 
+        ApplyLogLevel();
+
         logger::info(
             "[Settings] enabled={} offsetX={} offsetY={} offsetZ={} fov={}",
             enabled,
@@ -190,7 +202,8 @@ namespace Settings
 
         file << "[General]\n";
         file << "bEnable = " << (enabled ? 1 : 0) << "\n";
-        file << "bBarterMenu = " << (barterEnabled ? 1 : 0) << "\n\n";
+        file << "bBarterMenu = " << (barterEnabled ? 1 : 0) << "\n";
+        file << "bEnableLogging = " << (loggingEnabled ? 1 : 0) << "\n\n";
         file << "[Camera]\n";
         file << "fOffsetX = " << offsetX << "\n";
         file << "fOffsetY = " << offsetY << "\n";

@@ -144,6 +144,13 @@ namespace SettingsUI
         }
         HelpMarker("Shows your character in the barter menu.");
 
+        bool loggingEnabled = Settings::loggingEnabled;
+        if (ImGuiMCP::Checkbox("Enable Logging", &loggingEnabled)) {
+            Settings::loggingEnabled = loggingEnabled;
+            Settings::ApplyLogLevel();
+        }
+        HelpMarker("Writes detailed activity to ShowPlayerInInventory.log. Leave off unless troubleshooting. Warnings and errors are always logged.");
+
         ImGuiMCP::Spacing();
         ImGuiMCP::SeparatorText("CAMERA");
 

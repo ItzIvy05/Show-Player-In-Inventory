@@ -24,6 +24,7 @@ namespace
         case SKSE::MessagingInterface::kDataLoaded:
             Settings::Load();
             APIs::RequestAPIs();
+            MenuCamera::InstallHook();
 
             if (auto* ui = RE::UI::GetSingleton()) {
                 ui->AddEventSink<RE::MenuOpenCloseEvent>(&EventProcessor::GetSingleton());
