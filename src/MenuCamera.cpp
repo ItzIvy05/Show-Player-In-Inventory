@@ -8,38 +8,44 @@ namespace
 {
     constexpr float PI = 3.14159265358979323846f;
 
-    struct ThirdPersonUpdateHook
+    struct PlayerCameraUpdateHook
     {
-        static void Update(RE::ThirdPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
+        static void Update(RE::PlayerCamera* a_this)
         {
-            _Update(a_this, a_nextState);
+            _Update(a_this);
             MenuCamera::GetSingleton().EnforceCameraValues(a_this);
         }
-
         static inline REL::Relocation<decltype(Update)> _Update;
     };
 }
 
 void MenuCamera::InstallHook()
 {
-    REL::Relocation<std::uintptr_t> vtbl{ RE::ThirdPersonState::VTABLE[0] };
-    ThirdPersonUpdateHook::_Update = vtbl.write_vfunc(0x3, ThirdPersonUpdateHook::Update);
-    logger::info("[MenuCamera] Installed third person camera update hook.");
+    REL::Relocation<std::uintptr_t> vtbl{ RE::PlayerCamera::VTABLE[0] };
+    PlayerCameraUpdateHook::_Update = vtbl.write_vfunc(0x2, PlayerCameraUpdateHook::Update);
+    logger::info("[MenuCamera] Installed camera update hook.");
 }
 
-void MenuCamera::EnforceCameraValues(RE::ThirdPersonState* thirdState)
+void MenuCamera::EnforceCameraValues(RE::PlayerCamera* camera)
 {
-    if (!active || !thirdState) {
+    if (!active || !camera) {
         return;
     }
 
-    auto* camera = RE::PlayerCamera::GetSingleton();
-    if (!camera) {
+    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
+    if (!thirdState) {
         return;
     }
 
+    thirdState->toggleAnimCam = true;
+    thirdState->freeRotationEnabled = true;
+    thirdState->applyOffsets = true;
+    thirdState->targetZoomOffset = 0.0f;
+    thirdState->currentZoomOffset = 0.0f;
+    thirdState->savedZoomOffset = 0.0f;
+    thirdState->pitchZoomOffset = 0.1f;
     thirdState->posOffsetExpected = thirdState->posOffsetActual =
-        RE::NiPoint3(Settings::offsetX, Settings::offsetY, Settings::offsetZ);
+    RE::NiPoint3(Settings::offsetX, Settings::offsetY, Settings::offsetZ);
     camera->worldFOV = Settings::fov;
 }
 
@@ -59,7 +65,6 @@ bool MenuCamera::CaptureINISettings()
     if (!ini) {
         return false;
     }
-
     overShoulderCombatPosX = ini->GetSetting("fOverShoulderCombatPosX:Camera");
     overShoulderCombatAddY = ini->GetSetting("fOverShoulderCombatAddY:Camera");
     overShoulderCombatPosZ = ini->GetSetting("fOverShoulderCombatPosZ:Camera");
@@ -72,9 +77,7 @@ bool MenuCamera::CaptureINISettings()
     togglePOVDelay = ini->GetSetting("fTogglePOVDelay:Controls");
 
     iniCaptured = overShoulderCombatPosX && overShoulderCombatAddY && overShoulderCombatPosZ && autoVanityModeDelay &&
-                  overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist &&
-                  mouseWheelZoomSpeed && togglePOVDelay;
-
+                  overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist && mouseWheelZoomSpeed && togglePOVDelay;
     return iniCaptured;
 }
 
@@ -93,7 +96,10 @@ bool MenuCamera::Start()
         return false;
     }
 
-    if (player->IsInCombat() || player->IsOnMount()) {
+    static REL::Relocation<bool (*)(RE::PlayerCharacter*)> IsPlayerInCombat{ RELOCATION_ID(40013, 41024) };
+    const bool inCombat = IsPlayerInCombat(player);
+
+    if (inCombat || player->IsOnMount()) {
         logger::info("[MenuCamera] Skipped start. Player is in combat or on horseback.");
         return false;
     }
@@ -181,7 +187,10 @@ void MenuCamera::Stop()
     if (thirdState) {
         thirdState->toggleAnimCam = toggleAnimCam;
         thirdState->freeRotationEnabled = freeRotationEnabled;
+        thirdState->applyOffsets = applyOffsets;
         thirdState->targetZoomOffset = targetZoomOffset;
+        thirdState->currentZoomOffset = currentZoomOffset;
+        thirdState->savedZoomOffset = savedZoomOffset;
         thirdState->pitchZoomOffset = pitchZoomOffset;
         thirdState->freeRotation = freeRotation;
         thirdState->posOffsetExpected = thirdState->posOffsetActual = posOffsetExpected;
@@ -292,10 +301,13 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
     freeRotation = thirdState->freeRotation;
     posOffsetExpected = thirdState->posOffsetExpected;
     targetZoomOffset = thirdState->targetZoomOffset;
+    currentZoomOffset = thirdState->currentZoomOffset;
+    savedZoomOffset = thirdState->savedZoomOffset;
     pitchZoomOffset = thirdState->pitchZoomOffset;
     worldFOV = camera->worldFOV;
     toggleAnimCam = thirdState->toggleAnimCam;
     freeRotationEnabled = thirdState->freeRotationEnabled;
+    applyOffsets = thirdState->applyOffsets;
 
     player->GetGraphVariableBool("IsNPC", headtrackingEnabled);
     player->GetGraphVariableBool("bHeadTrackSpine", headTrackSpineEnabled);
@@ -332,12 +344,8 @@ void MenuCamera::ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera
     camera->cameraTarget = player;
     camera->ForceThirdPerson();
 
-    thirdState->toggleAnimCam = true;
-    thirdState->freeRotationEnabled = true;
     thirdState->freeRotation.x = PI - 0.5f;
     thirdState->freeRotation.y = 0.0f;
-    thirdState->targetZoomOffset = 0.0f;
-    thirdState->pitchZoomOffset = 0.1f;
 
     autoVanityModeDelay->data.f = 10800.0f;
     togglePOVDelay->data.f = 10800.0f;
@@ -351,10 +359,9 @@ void MenuCamera::ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera
     mouseWheelZoomSpeed->data.f = 10000.0f;
 
     player->data.angle.x = 0.1f;
-    thirdState->posOffsetExpected = thirdState->posOffsetActual = RE::NiPoint3(Settings::offsetX, Settings::offsetY,
-                                                                              Settings::offsetZ);
 
-    camera->worldFOV = Settings::fov;
+    EnforceCameraValues(camera);
+
     camera->Update();
     player->Update3DPosition(true);
 }

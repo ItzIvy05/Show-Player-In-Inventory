@@ -11,7 +11,7 @@ public:
     void Stop();
     void ApplySettings();
     void Rotate(float deltaX);
-    void EnforceCameraValues(RE::ThirdPersonState* thirdState);
+    void EnforceCameraValues(RE::PlayerCamera* camera);
     [[nodiscard]] bool IsActive() const;
 
 private:
@@ -32,6 +32,8 @@ private:
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
     float targetZoomOffset = 0.0f;
+    float currentZoomOffset = 0.0f;
+    float savedZoomOffset = 0.0f;
     float pitchZoomOffset = 0.0f;
     float worldFOV = 0.0f;
 
@@ -55,6 +57,7 @@ private:
     bool eyeTrackingEnabled = false;
     bool toggleAnimCam = false;
     bool freeRotationEnabled = false;
+    bool applyOffsets = false;
 
     [[nodiscard]] bool CaptureINISettings();
     [[nodiscard]] bool CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState);
