@@ -12,6 +12,8 @@ public:
     void ApplySettings();
     void Rotate(float deltaX);
     void EnforceCameraValues(RE::PlayerCamera* camera);
+    void OnPerspectiveUpdate(bool firstPerson);
+    void SetCacheFrozen(bool frozen);
     [[nodiscard]] bool IsActive() const;
 
 private:
@@ -51,7 +53,8 @@ private:
     bool iniCaptured = false;
     bool active = false;
     bool smoothCamControl = false;
-    bool wasFirstPerson = false;
+    bool cachedFirstPerson = false;
+    bool cacheFrozen = false;
     bool headtrackingEnabled = false;
     bool headTrackSpineEnabled = false;
     bool eyeTrackingEnabled = false;

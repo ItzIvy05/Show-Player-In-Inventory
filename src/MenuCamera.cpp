@@ -1,5 +1,4 @@
 #include "MenuCamera.h"
-
 #include "APIManager.h"
 #include "EventProcessor.h"
 #include "Settings.h"
@@ -8,12 +7,22 @@ namespace
 {
     constexpr float PI = 3.14159265358979323846f;
 
-    struct PlayerCameraUpdateHook
+    struct ThirdPersonUpdateHook
     {
-        static void Update(RE::PlayerCamera* a_this)
+        static void Update(RE::ThirdPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
         {
-            _Update(a_this);
-            MenuCamera::GetSingleton().EnforceCameraValues(a_this);
+            _Update(a_this, a_nextState);
+            MenuCamera::GetSingleton().OnPerspectiveUpdate(false);
+        }
+        static inline REL::Relocation<decltype(Update)> _Update;
+    };
+
+    struct FirstPersonUpdateHook
+    {
+        static void Update(RE::FirstPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
+        {
+            _Update(a_this, a_nextState);
+            MenuCamera::GetSingleton().OnPerspectiveUpdate(true);
         }
         static inline REL::Relocation<decltype(Update)> _Update;
     };
@@ -21,9 +30,31 @@ namespace
 
 void MenuCamera::InstallHook()
 {
-    REL::Relocation<std::uintptr_t> vtbl{ RE::PlayerCamera::VTABLE[0] };
-    PlayerCameraUpdateHook::_Update = vtbl.write_vfunc(0x2, PlayerCameraUpdateHook::Update);
-    logger::info("[MenuCamera] Installed camera update hook.");
+    REL::Relocation<std::uintptr_t> thirdVtbl{ RE::ThirdPersonState::VTABLE[0] };
+    ThirdPersonUpdateHook::_Update = thirdVtbl.write_vfunc(0x3, ThirdPersonUpdateHook::Update);
+
+    REL::Relocation<std::uintptr_t> firstVtbl{ RE::FirstPersonState::VTABLE[0] };
+    FirstPersonUpdateHook::_Update = firstVtbl.write_vfunc(0x3, FirstPersonUpdateHook::Update);
+
+    logger::info("[MenuCamera] Installed first and third person camera state hooks.");
+}
+
+void MenuCamera::SetCacheFrozen(bool frozen)
+{
+    cacheFrozen = frozen;
+}
+
+void MenuCamera::OnPerspectiveUpdate(bool firstPerson)
+{
+    if (!active && !cacheFrozen) {
+        cachedFirstPerson = firstPerson;
+    }
+
+    if (active && !firstPerson) {
+        if (auto* camera = RE::PlayerCamera::GetSingleton()) {
+            EnforceCameraValues(camera);
+        }
+    }
 }
 
 void MenuCamera::EnforceCameraValues(RE::PlayerCamera* camera)
@@ -164,10 +195,11 @@ void MenuCamera::Stop()
         logger::info("[MenuCamera] SmoothCam camera control released.");
     }
 
-    if (wasFirstPerson) {
-        camera->ForceFirstPerson();
-    } else {
-        camera->ForceThirdPerson();
+    if (cachedFirstPerson) {
+        auto* firstState = static_cast<RE::FirstPersonState*>(camera->cameraStates[RE::CameraState::kFirstPerson].get());
+        if (firstState) {
+            camera->SetState(firstState);
+        }
     }
 
     player->data.angle.x = playerAngleX;
@@ -294,7 +326,6 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
     }
 
     camera->cameraTarget = player;
-    wasFirstPerson = camera->IsInFirstPerson();
 
     playerAngleX = player->data.angle.x;
     playerAngleZ = player->data.angle.z;
@@ -370,5 +401,4 @@ void MenuCamera::ResetSavedState()
 {
     active = false;
     smoothCamControl = false;
-    wasFirstPerson = false;
 }

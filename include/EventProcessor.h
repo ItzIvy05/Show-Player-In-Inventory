@@ -20,6 +20,7 @@ public:
 private:
     RE::BSFixedString activeMenu;
     bool menuOpen = false;
+    bool tweenOpen = false;
     bool rotating = false;
 };
 

@@ -58,6 +58,11 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         return RE::BSEventNotifyControl::kContinue;
     }
 
+    if (event->menuName == RE::TweenMenu::MENU_NAME) {
+        tweenOpen = event->opening;
+        MenuCamera::GetSingleton().SetCacheFrozen(tweenOpen || menuOpen);
+    }
+
     if (menuOpen) {
         QueueVanillaMenuBlurClear();
     }
@@ -68,6 +73,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         }
 
         menuOpen = true;
+        MenuCamera::GetSingleton().SetCacheFrozen(true);
         activeMenu = event->menuName;
         logger::info("[EventProcessor] Watched menu opened.");
         ApplyLiveSettings();
@@ -78,6 +84,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         logger::info("[EventProcessor] Watched menu closed.");
         MenuCamera::GetSingleton().Stop();
         menuOpen = false;
+        MenuCamera::GetSingleton().SetCacheFrozen(tweenOpen);
         QueueVanillaMenuBlurClear();
     }
 

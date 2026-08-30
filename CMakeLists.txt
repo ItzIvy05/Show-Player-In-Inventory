@@ -7,7 +7,7 @@ endif()
 set(AUTHOR_NAME "Ivy")
 set(PRODUCT_NAME "ShowPlayerInInventory")
 set(PLUGIN_OUTPUT_NAME "ShowPlayerInInventory")
-project(${PRODUCT_NAME} VERSION 1.5.2.0 LANGUAGES CXX)
+project(${PRODUCT_NAME} VERSION 1.6.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,7 +50,6 @@ set(IVY_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/SettingsUI.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/SKSEMenuFramework.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/API/APIManager.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/API/SmoothCamAPI.h"
 )

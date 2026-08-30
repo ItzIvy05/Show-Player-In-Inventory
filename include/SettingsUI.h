@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SKSEMenuFramework.h"
+#include "SKSEMCP/SKSEMenuFramework.hpp"
 
 namespace SettingsUI
 {
