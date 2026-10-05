@@ -1,13 +1,11 @@
 #pragma once
 
-class MenuCamera
+class MenuCamera : public REX::Singleton<MenuCamera>
 {
 public:
-    static MenuCamera& GetSingleton();
-
     static void InstallHook();
 
-    bool Start();
+    void Start();
     void Stop();
     void ApplySettings();
     void Rotate(float deltaX);
@@ -63,7 +61,7 @@ private:
     bool applyOffsets = false;
 
     [[nodiscard]] bool CaptureINISettings();
-    [[nodiscard]] bool CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState);
+    void CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState);
     void ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState);
     void ResetSavedState();
 };

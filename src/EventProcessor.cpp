@@ -3,8 +3,6 @@
 #include "MenuCamera.h"
 #include "Settings.h"
 
-SKSE::PluginHandle g_pluginHandle = SKSE::kInvalidPluginHandle;
-
 namespace
 {
     std::atomic_bool blurClearQueued = false;
@@ -12,10 +10,6 @@ namespace
     void ClearVanillaMenuBlur()
     {
         auto* blur = RE::UIBlurManager::GetSingleton();
-        if (!blur) {
-            return;
-        }
-
         for (std::int32_t i = 0; i < 8 && blur->blurCount > 0; ++i) {
             blur->DecrementBlurCount();
         }
@@ -27,32 +21,19 @@ namespace
     {
         ClearVanillaMenuBlur();
 
-        auto* tasks = SKSE::GetTaskInterface();
-        if (!tasks) {
-            return;
-        }
-
         bool expected = false;
         if (!blurClearQueued.compare_exchange_strong(expected, true)) {
             return;
         }
 
-        tasks->AddUITask([] {
+        SKSE::GetTaskInterface()->AddUITask([] {
             ClearVanillaMenuBlur();
             blurClearQueued.store(false);
         });
     }
 }
 
-EventProcessor& EventProcessor::GetSingleton()
-{
-    static EventProcessor instance;
-    return instance;
-}
-
-RE::BSEventNotifyControl EventProcessor::ProcessEvent(
-    const RE::MenuOpenCloseEvent* event,
-    RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+RE::BSEventNotifyControl EventProcessor::ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
     if (!event) {
         return RE::BSEventNotifyControl::kContinue;
@@ -60,7 +41,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
 
     if (event->menuName == RE::TweenMenu::MENU_NAME) {
         tweenOpen = event->opening;
-        MenuCamera::GetSingleton().SetCacheFrozen(tweenOpen || menuOpen);
+        MenuCamera::GetSingleton()->SetCacheFrozen(tweenOpen || menuOpen);
     }
 
     if (menuOpen) {
@@ -73,7 +54,7 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
         }
 
         menuOpen = true;
-        MenuCamera::GetSingleton().SetCacheFrozen(true);
+        MenuCamera::GetSingleton()->SetCacheFrozen(true);
         activeMenu = event->menuName;
         logger::info("[EventProcessor] Watched menu opened.");
         ApplyLiveSettings();
@@ -82,59 +63,56 @@ RE::BSEventNotifyControl EventProcessor::ProcessEvent(
 
     if (menuOpen && event->menuName == activeMenu) {
         logger::info("[EventProcessor] Watched menu closed.");
-        MenuCamera::GetSingleton().Stop();
+        MenuCamera::GetSingleton()->Stop();
         menuOpen = false;
-        MenuCamera::GetSingleton().SetCacheFrozen(tweenOpen);
+        MenuCamera::GetSingleton()->SetCacheFrozen(tweenOpen);
         QueueVanillaMenuBlurClear();
     }
 
     return RE::BSEventNotifyControl::kContinue;
 }
 
-RE::BSEventNotifyControl EventProcessor::ProcessEvent(
-    RE::InputEvent* const* event,
-    RE::BSTEventSource<RE::InputEvent*>*)
+RE::BSEventNotifyControl EventProcessor::ProcessEvent(RE::InputEvent* const* event, RE::BSTEventSource<RE::InputEvent*>*)
 {
-    if (!event || !MenuCamera::GetSingleton().IsActive()) {
+    if (!event || !MenuCamera::GetSingleton()->IsActive()) {
         rotating = false;
         return RE::BSEventNotifyControl::kContinue;
     }
 
     for (auto* current = *event; current; current = current->next) {
         if (const auto* button = current->AsButtonEvent()) {
-            std::uint32_t code = button->GetIDCode();
-
-            switch (button->device.get()) {
-            case RE::INPUT_DEVICE::kMouse:
-                code += SKSE::InputMap::kMacro_MouseButtonOffset;
-                break;
-
-            case RE::INPUT_DEVICE::kGamepad:
-                code = SKSE::InputMap::GamepadMaskToKeycode(code);
-                break;
-
-            default:
-                break;
-            }
-
-            if (code == Settings::rotateKey) {
-                rotating = button->Value() > 0.0f;
+            if (GetKeyCode(button) == Settings::rotateKey.GetValue()) {
+                rotating = button->IsPressed();
             }
 
             continue;
         }
 
         if (const auto* move = current->AsMouseMoveEvent(); move && rotating) {
-            MenuCamera::GetSingleton().Rotate(static_cast<float>(move->mouseInputX));
+            MenuCamera::GetSingleton()->Rotate(static_cast<float>(move->mouseInputX));
             continue;
         }
 
         if (const auto* stick = current->AsThumbstickEvent(); stick && rotating && stick->IsRight()) {
-            MenuCamera::GetSingleton().Rotate(stick->xValue * 5.0f);
+            MenuCamera::GetSingleton()->Rotate(stick->xValue * 5.0f);
         }
     }
 
     return RE::BSEventNotifyControl::kContinue;
+}
+
+std::uint32_t EventProcessor::GetKeyCode(const RE::ButtonEvent* button)
+{
+    switch (button->GetDevice()) {
+    case RE::INPUT_DEVICE::kMouse:
+        return SKSE::InputMap::kMacro_MouseButtonOffset + button->GetIDCode();
+
+    case RE::INPUT_DEVICE::kGamepad:
+        return SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode());
+
+    default:
+        return button->GetIDCode();
+    }
 }
 
 void EventProcessor::ApplyLiveSettings()
@@ -143,16 +121,16 @@ void EventProcessor::ApplyLiveSettings()
         return;
     }
 
-    if (!Settings::enabled) {
-        MenuCamera::GetSingleton().Stop();
+    if (!Settings::enabled.GetValue()) {
+        MenuCamera::GetSingleton()->Stop();
         QueueVanillaMenuBlurClear();
         return;
     }
 
-    if (MenuCamera::GetSingleton().IsActive()) {
-        MenuCamera::GetSingleton().ApplySettings();
+    if (MenuCamera::GetSingleton()->IsActive()) {
+        MenuCamera::GetSingleton()->ApplySettings();
     } else {
-        MenuCamera::GetSingleton().Start();
+        MenuCamera::GetSingleton()->Start();
     }
 
     QueueVanillaMenuBlurClear();

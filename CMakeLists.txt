@@ -17,6 +17,7 @@ set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(REX_OPTION_INI ON CACHE BOOL "" FORCE)
 
 set(COMMONLIB_SOURCE_DIR "$ENV{COMMONLIB_SSE_FOLDER}")
 add_subdirectory("${COMMONLIB_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build")
@@ -25,7 +26,7 @@ include("${COMMONLIB_SRC_DIR}/cmake/CommonLibSSE.cmake")
 
 find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
 find_path(CLIB_UTILS_QTR_INCLUDE_DIRS "ClibUtilsQTR/utils.hpp")
-find_path(SKSE_MCP_INCLUDE_DIRS "SKSEMCP/utils.hpp")
+find_path(FLICK_API_INCLUDE_DIRS "FUCK_API.h")
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in"
@@ -49,7 +50,6 @@ set(IVY_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/PCH.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/SettingsUI.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/logger.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/API/APIManager.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/API/SmoothCamAPI.h"
 )
@@ -76,7 +76,7 @@ target_include_directories(
     PRIVATE
         ${CLIB_UTIL_INCLUDE_DIRS}
         ${CLIB_UTILS_QTR_INCLUDE_DIRS}
-        ${SKSE_MCP_INCLUDE_DIRS}
+        ${FLICK_API_INCLUDE_DIRS}
         "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/API"

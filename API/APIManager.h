@@ -9,5 +9,3 @@ struct APIs
     static void RegisterCallbacks();
     static void RequestAPIs();
 };
-
-extern SmoothCamAPI::IVSmoothCam2* g_SmoothCam;

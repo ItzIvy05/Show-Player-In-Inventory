@@ -1,18 +1,20 @@
 #include "MenuCamera.h"
 #include "APIManager.h"
-#include "EventProcessor.h"
 #include "Settings.h"
 
 namespace
 {
-    constexpr float PI = 3.14159265358979323846f;
+    RE::ThirdPersonState* GetThirdPersonState(RE::PlayerCamera* camera)
+    {
+        return static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
+    }
 
     struct ThirdPersonUpdateHook
     {
         static void Update(RE::ThirdPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
         {
             _Update(a_this, a_nextState);
-            MenuCamera::GetSingleton().OnPerspectiveUpdate(false);
+            MenuCamera::GetSingleton()->OnPerspectiveUpdate(false);
         }
         static inline REL::Relocation<decltype(Update)> _Update;
     };
@@ -22,7 +24,7 @@ namespace
         static void Update(RE::FirstPersonState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_nextState)
         {
             _Update(a_this, a_nextState);
-            MenuCamera::GetSingleton().OnPerspectiveUpdate(true);
+            MenuCamera::GetSingleton()->OnPerspectiveUpdate(true);
         }
         static inline REL::Relocation<decltype(Update)> _Update;
     };
@@ -51,23 +53,13 @@ void MenuCamera::OnPerspectiveUpdate(bool firstPerson)
     }
 
     if (active && !firstPerson) {
-        if (auto* camera = RE::PlayerCamera::GetSingleton()) {
-            EnforceCameraValues(camera);
-        }
+        EnforceCameraValues(RE::PlayerCamera::GetSingleton());
     }
 }
 
 void MenuCamera::EnforceCameraValues(RE::PlayerCamera* camera)
 {
-    if (!active || !camera) {
-        return;
-    }
-
-    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
-    if (!thirdState) {
-        return;
-    }
-
+    auto* thirdState = GetThirdPersonState(camera);
     thirdState->toggleAnimCam = true;
     thirdState->freeRotationEnabled = true;
     thirdState->applyOffsets = true;
@@ -75,15 +67,8 @@ void MenuCamera::EnforceCameraValues(RE::PlayerCamera* camera)
     thirdState->currentZoomOffset = 0.0f;
     thirdState->savedZoomOffset = 0.0f;
     thirdState->pitchZoomOffset = 0.1f;
-    thirdState->posOffsetExpected = thirdState->posOffsetActual =
-    RE::NiPoint3(Settings::offsetX, Settings::offsetY, Settings::offsetZ);
-    camera->worldFOV = Settings::fov;
-}
-
-MenuCamera& MenuCamera::GetSingleton()
-{
-    static MenuCamera instance;
-    return instance;
+    thirdState->posOffsetExpected = thirdState->posOffsetActual = RE::NiPoint3(Settings::offsetX.GetValue(), Settings::offsetY.GetValue(), Settings::offsetZ.GetValue());
+    camera->worldFOV = Settings::fov.GetValue();
 }
 
 bool MenuCamera::CaptureINISettings()
@@ -93,9 +78,6 @@ bool MenuCamera::CaptureINISettings()
     }
 
     auto* ini = RE::INISettingCollection::GetSingleton();
-    if (!ini) {
-        return false;
-    }
     overShoulderCombatPosX = ini->GetSetting("fOverShoulderCombatPosX:Camera");
     overShoulderCombatAddY = ini->GetSetting("fOverShoulderCombatAddY:Camera");
     overShoulderCombatPosZ = ini->GetSetting("fOverShoulderCombatPosZ:Camera");
@@ -107,50 +89,36 @@ bool MenuCamera::CaptureINISettings()
     mouseWheelZoomSpeed = ini->GetSetting("fMouseWheelZoomSpeed:Camera");
     togglePOVDelay = ini->GetSetting("fTogglePOVDelay:Controls");
 
-    iniCaptured = overShoulderCombatPosX && overShoulderCombatAddY && overShoulderCombatPosZ && autoVanityModeDelay &&
-                  overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist && mouseWheelZoomSpeed && togglePOVDelay;
+    iniCaptured = overShoulderCombatPosX && overShoulderCombatAddY && overShoulderCombatPosZ && autoVanityModeDelay && overShoulderPosX && overShoulderPosZ && vanityModeMinDist && vanityModeMaxDist && mouseWheelZoomSpeed && togglePOVDelay;
     return iniCaptured;
 }
 
-bool MenuCamera::Start()
+void MenuCamera::Start()
 {
     if (active) {
         ApplySettings();
-        return true;
+        return;
     }
 
     auto* player = RE::PlayerCharacter::GetSingleton();
-    auto* camera = RE::PlayerCamera::GetSingleton();
-
-    if (!player || !camera) {
-        logger::warn("[MenuCamera] Could not start. Missing player or camera.");
-        return false;
-    }
-
-    static REL::Relocation<bool (*)(RE::PlayerCharacter*)> IsPlayerInCombat{ RELOCATION_ID(40013, 41024) };
-    const bool inCombat = IsPlayerInCombat(player);
-
-    if (inCombat || player->IsOnMount()) {
+    if (player->IsInCombat() || player->IsOnMount()) {
         logger::info("[MenuCamera] Skipped start. Player is in combat or on horseback.");
-        return false;
+        return;
     }
 
     if (!CaptureINISettings()) {
         logger::warn("[MenuCamera] Could not start. Missing INI camera settings.");
-        return false;
+        return;
     }
 
-    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
-    if (!thirdState) {
-        logger::warn("[MenuCamera] Could not start. Missing third person camera state.");
-        return false;
-    }
+    auto* camera = RE::PlayerCamera::GetSingleton();
+    auto* thirdState = GetThirdPersonState(camera);
 
-    if (g_SmoothCam && g_SmoothCam->IsCameraEnabled()) {
-        const auto result = g_SmoothCam->RequestCameraControl(g_pluginHandle);
+    if (APIs::SmoothCam && APIs::SmoothCam->IsCameraEnabled()) {
+        const auto result = APIs::SmoothCam->RequestCameraControl(SKSE::GetPluginHandle());
 
         if (result == SmoothCamAPI::APIResult::OK || result == SmoothCamAPI::APIResult::AlreadyGiven) {
-            g_SmoothCam->RequestInterpolatorUpdates(g_pluginHandle, true);
+            APIs::SmoothCam->RequestInterpolatorUpdates(SKSE::GetPluginHandle(), true);
             smoothCamControl = true;
             logger::info("[MenuCamera] SmoothCam camera control acquired.");
         } else {
@@ -160,16 +128,11 @@ bool MenuCamera::Start()
         logger::debug("[MenuCamera] SmoothCam API not available or SmoothCam disabled.");
     }
 
-    if (!CaptureState(player, camera, thirdState)) {
-        ResetSavedState();
-        return false;
-    }
+    CaptureState(player, camera, thirdState);
 
     active = true;
     ApplyCameraValues(player, camera, thirdState);
-    logger::info("[MenuCamera] Started. offsetX={} offsetY={} offsetZ={} fov={}", Settings::offsetX, Settings::offsetY, Settings::offsetZ, Settings::fov);
-
-    return true;
+    logger::info("[MenuCamera] Started. offsetX={} offsetY={} offsetZ={} fov={}", Settings::offsetX.GetValue(), Settings::offsetY.GetValue(), Settings::offsetZ.GetValue(), Settings::fov.GetValue());
 }
 
 void MenuCamera::Stop()
@@ -182,24 +145,15 @@ void MenuCamera::Stop()
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
+    auto* thirdState = GetThirdPersonState(camera);
 
-    if (!player || !camera) {
-        ResetSavedState();
-        return;
-    }
-
-    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
-
-    if (smoothCamControl && g_SmoothCam && g_SmoothCam->IsCameraEnabled()) {
-        g_SmoothCam->ReleaseCameraControl(g_pluginHandle);
+    if (smoothCamControl && APIs::SmoothCam && APIs::SmoothCam->IsCameraEnabled()) {
+        APIs::SmoothCam->ReleaseCameraControl(SKSE::GetPluginHandle());
         logger::info("[MenuCamera] SmoothCam camera control released.");
     }
 
     if (cachedFirstPerson) {
-        auto* firstState = static_cast<RE::FirstPersonState*>(camera->cameraStates[RE::CameraState::kFirstPerson].get());
-        if (firstState) {
-            camera->SetState(firstState);
-        }
+        camera->SetState(camera->cameraStates[RE::CameraState::kFirstPerson].get());
     }
 
     player->data.angle.x = playerAngleX;
@@ -209,51 +163,49 @@ void MenuCamera::Stop()
     player->SetGraphVariableBool("bUseEyeTracking", eyeTrackingEnabled);
 
     if (autoVanityModeDelay) {
-        autoVanityModeDelay->data.f = savedAutoVanityModeDelay;
+        autoVanityModeDelay->SetFloat(savedAutoVanityModeDelay);
     }
 
     if (togglePOVDelay) {
-        togglePOVDelay->data.f = savedTogglePOVDelay;
+        togglePOVDelay->SetFloat(savedTogglePOVDelay);
     }
 
-    if (thirdState) {
-        thirdState->toggleAnimCam = toggleAnimCam;
-        thirdState->freeRotationEnabled = freeRotationEnabled;
-        thirdState->applyOffsets = applyOffsets;
-        thirdState->targetZoomOffset = targetZoomOffset;
-        thirdState->currentZoomOffset = currentZoomOffset;
-        thirdState->savedZoomOffset = savedZoomOffset;
-        thirdState->pitchZoomOffset = pitchZoomOffset;
-        thirdState->freeRotation = freeRotation;
-        thirdState->posOffsetExpected = thirdState->posOffsetActual = posOffsetExpected;
-    }
+    thirdState->toggleAnimCam = toggleAnimCam;
+    thirdState->freeRotationEnabled = freeRotationEnabled;
+    thirdState->applyOffsets = applyOffsets;
+    thirdState->targetZoomOffset = targetZoomOffset;
+    thirdState->currentZoomOffset = currentZoomOffset;
+    thirdState->savedZoomOffset = savedZoomOffset;
+    thirdState->pitchZoomOffset = pitchZoomOffset;
+    thirdState->freeRotation = freeRotation;
+    thirdState->posOffsetExpected = thirdState->posOffsetActual = posOffsetExpected;
 
     if (vanityModeMinDist) {
-        vanityModeMinDist->data.f = savedVanityModeMinDist;
+        vanityModeMinDist->SetFloat(savedVanityModeMinDist);
     }
 
     if (vanityModeMaxDist) {
-        vanityModeMaxDist->data.f = savedVanityModeMaxDist;
+        vanityModeMaxDist->SetFloat(savedVanityModeMaxDist);
     }
 
     if (overShoulderCombatPosX) {
-        overShoulderCombatPosX->data.f = savedOverShoulderCombatPosX;
+        overShoulderCombatPosX->SetFloat(savedOverShoulderCombatPosX);
     }
 
     if (overShoulderCombatAddY) {
-        overShoulderCombatAddY->data.f = savedOverShoulderCombatAddY;
+        overShoulderCombatAddY->SetFloat(savedOverShoulderCombatAddY);
     }
 
     if (overShoulderCombatPosZ) {
-        overShoulderCombatPosZ->data.f = savedOverShoulderCombatPosZ;
+        overShoulderCombatPosZ->SetFloat(savedOverShoulderCombatPosZ);
     }
 
     if (overShoulderPosX) {
-        overShoulderPosX->data.f = savedOverShoulderPosX;
+        overShoulderPosX->SetFloat(savedOverShoulderPosX);
     }
 
     if (overShoulderPosZ) {
-        overShoulderPosZ->data.f = savedOverShoulderPosZ;
+        overShoulderPosZ->SetFloat(savedOverShoulderPosZ);
     }
 
     camera->cameraTarget = player;
@@ -262,7 +214,7 @@ void MenuCamera::Stop()
     player->Update3DPosition(true);
 
     if (mouseWheelZoomSpeed) {
-        mouseWheelZoomSpeed->data.f = savedMouseWheelZoomSpeed;
+        mouseWheelZoomSpeed->SetFloat(savedMouseWheelZoomSpeed);
     }
 
     ResetSavedState();
@@ -275,19 +227,9 @@ void MenuCamera::ApplySettings()
         return;
     }
 
-    auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
-    if (!player || !camera) {
-        return;
-    }
-
-    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
-    if (!thirdState) {
-        return;
-    }
-
-    ApplyCameraValues(player, camera, thirdState);
-    logger::info("[MenuCamera] Applied live settings. offsetX={} offsetY={} offsetZ={} fov={}", Settings::offsetX, Settings::offsetY, Settings::offsetZ, Settings::fov);
+    ApplyCameraValues(RE::PlayerCharacter::GetSingleton(), camera, GetThirdPersonState(camera));
+    logger::info("[MenuCamera] Applied live settings. offsetX={} offsetY={} offsetZ={} fov={}", Settings::offsetX.GetValue(), Settings::offsetY.GetValue(), Settings::offsetZ.GetValue(), Settings::fov.GetValue());
 }
 
 void MenuCamera::Rotate(float deltaX)
@@ -298,18 +240,9 @@ void MenuCamera::Rotate(float deltaX)
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
-    if (!player || !camera) {
-        return;
-    }
-
-    auto* thirdState = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraState::kThirdPerson].get());
-    if (!thirdState) {
-        return;
-    }
-
     const float delta = deltaX * 0.01f;
     player->data.angle.z -= delta;
-    thirdState->freeRotation.x += delta;
+    GetThirdPersonState(camera)->freeRotation.x += delta;
     camera->Update();
     player->Update3DPosition(true);
 }
@@ -319,16 +252,12 @@ bool MenuCamera::IsActive() const
     return active;
 }
 
-bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState)
+void MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState)
 {
-    if (!player || !camera || !thirdState) {
-        return false;
-    }
-
     camera->cameraTarget = player;
 
-    playerAngleX = player->data.angle.x;
-    playerAngleZ = player->data.angle.z;
+    playerAngleX = player->GetAngleX();
+    playerAngleZ = player->GetAngleZ();
     freeRotation = thirdState->freeRotation;
     posOffsetExpected = thirdState->posOffsetExpected;
     targetZoomOffset = thirdState->targetZoomOffset;
@@ -362,32 +291,26 @@ bool MenuCamera::CaptureState(RE::PlayerCharacter* player, RE::PlayerCamera* cam
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
         process->ClearActionHeadtrackTarget(true);
     }
-
-    return true;
 }
 
 void MenuCamera::ApplyCameraValues(RE::PlayerCharacter* player, RE::PlayerCamera* camera, RE::ThirdPersonState* thirdState)
 {
-    if (!player || !camera || !thirdState) {
-        return;
-    }
-
     camera->cameraTarget = player;
     camera->ForceThirdPerson();
 
-    thirdState->freeRotation.x = PI - 0.5f;
+    thirdState->freeRotation.x = RE::NI_PI - 0.5f;
     thirdState->freeRotation.y = 0.0f;
 
-    autoVanityModeDelay->data.f = 10800.0f;
-    togglePOVDelay->data.f = 10800.0f;
-    overShoulderCombatPosX->data.f = Settings::offsetX;
-    overShoulderCombatAddY->data.f = Settings::offsetY;
-    overShoulderCombatPosZ->data.f = Settings::offsetZ;
-    overShoulderPosX->data.f = Settings::offsetX;
-    overShoulderPosZ->data.f = Settings::offsetZ;
-    vanityModeMinDist->data.f = Settings::distance;
-    vanityModeMaxDist->data.f = Settings::distance;
-    mouseWheelZoomSpeed->data.f = 10000.0f;
+    autoVanityModeDelay->SetFloat(10800.0f);
+    togglePOVDelay->SetFloat(10800.0f);
+    overShoulderCombatPosX->SetFloat(Settings::offsetX.GetValue());
+    overShoulderCombatAddY->SetFloat(Settings::offsetY.GetValue());
+    overShoulderCombatPosZ->SetFloat(Settings::offsetZ.GetValue());
+    overShoulderPosX->SetFloat(Settings::offsetX.GetValue());
+    overShoulderPosZ->SetFloat(Settings::offsetZ.GetValue());
+    vanityModeMinDist->SetFloat(Settings::distance);
+    vanityModeMaxDist->SetFloat(Settings::distance);
+    mouseWheelZoomSpeed->SetFloat(10000.0f);
 
     player->data.angle.x = 0.1f;
 

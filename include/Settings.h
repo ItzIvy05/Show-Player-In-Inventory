@@ -2,24 +2,21 @@
 
 namespace Settings
 {
-    inline constexpr const wchar_t* DLL_NAME = L"ShowPlayerInInventory.dll";
-    inline constexpr const char* INI_NAME = "ShowPlayerInInventory.ini";
+    inline constexpr const char* INI_PATH = "Data/SKSE/Plugins/ShowPlayerInInventory.ini";
 
-    inline bool loaded = false;
-    inline bool enabled = true;
-    inline bool barterEnabled = false;
-    inline bool loggingEnabled = false;
-    inline float offsetX = -46.7f;
-    inline float offsetY = -12.0f;
-    inline float offsetZ = -20.0f;
+    inline REX::INI::Bool<> enabled{ "General", "bEnable", true };
+    inline REX::INI::Bool<> barterEnabled{ "General", "bBarterMenu", false };
+    inline REX::INI::Bool<> loggingEnabled{ "General", "bEnableLogging", false };
+    inline REX::INI::F32<> offsetX{ "Camera", "fOffsetX", -46.7f };
+    inline REX::INI::F32<> offsetY{ "Camera", "fOffsetY", -12.0f };
+    inline REX::INI::F32<> offsetZ{ "Camera", "fOffsetZ", -20.0f };
     inline constexpr float distance = 145.0f;
-    inline float fov = 60.0f;
-    inline std::uint32_t rotateKey = 258;
+    inline REX::INI::F32<> fov{ "Camera", "fFOV", 60.0f };
+    inline REX::INI::U32<> rotateKey{ "Controls", "iRotateKey", 258 };
 
     void SetDefaults();
     void ApplyLogLevel();
     void Load();
     void Save();
-    [[nodiscard]] std::filesystem::path GetINIPath();
     [[nodiscard]] bool IsWatchedMenu(const RE::BSFixedString& menuName);
 }

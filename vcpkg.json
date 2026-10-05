@@ -11,7 +11,8 @@
     "clib-util",
     "clib-utils-qtr",
     "directxtk",
-    "skse-mcp"
+    "flick-api",
+    "simpleini"
   ],
   "overrides": [
     {

@@ -1,6 +1,6 @@
 # Show Player In Inventory
 
-**Show Player In Inventory** adjusts the camera so you can see your character in the inventory menu. It also includes real-time camera position options through the **SKSE Menu Framework**.
+**Show Player In Inventory** adjusts the camera so you can see your character in the inventory menu. It also includes real-time camera position options through **FLICK**.
 
 ## Why does this mod exist when Show Player In Menus is already a thing?
 
@@ -12,7 +12,7 @@ I wanted something much simpler that only does the basics, which has kind of bec
 
 - Skyrim Script Extender (SKSE64)
 - Address Library for SKSE Plugins
-- SKSE Menu Framework
+- FLICK
 
 ## Recommended
 

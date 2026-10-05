@@ -1,5 +1,3 @@
-#include "logger.h"
-
 #include "APIManager.h"
 #include "EventProcessor.h"
 #include "MenuCamera.h"
@@ -16,30 +14,16 @@ namespace
             break;
 
         case SKSE::MessagingInterface::kPostPostLoad:
-        case SKSE::MessagingInterface::kNewGame:
-        case SKSE::MessagingInterface::kPostLoadGame:
             APIs::RequestAPIs();
             break;
 
         case SKSE::MessagingInterface::kDataLoaded:
             Settings::Load();
-            APIs::RequestAPIs();
+            SettingsUI::Register();
             MenuCamera::InstallHook();
-
-            if (auto* ui = RE::UI::GetSingleton()) {
-                ui->AddEventSink<RE::MenuOpenCloseEvent>(&EventProcessor::GetSingleton());
-                logger::info("[IvyShowPlayerInMenus] Registered inventory menu watcher.");
-            } else {
-                logger::warn("[IvyShowPlayerInMenus] Could not register menu watcher.");
-            }
-
-            if (auto* input = RE::BSInputDeviceManager::GetSingleton()) {
-                input->AddEventSink<RE::InputEvent*>(&EventProcessor::GetSingleton());
-                logger::info("[IvyShowPlayerInMenus] Registered rotation input watcher.");
-            } else {
-                logger::warn("[IvyShowPlayerInMenus] Could not register rotation input watcher.");
-            }
-
+            RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(EventProcessor::GetSingleton());
+            RE::BSInputDeviceManager::GetSingleton()->AddEventSink<RE::InputEvent*>(EventProcessor::GetSingleton());
+            logger::info("[IvyShowPlayerInMenus] Registered menu and input watchers.");
             break;
 
         default:
@@ -50,14 +34,10 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
-    SetupLog();
-    REL::Module::reset();
-
     SKSE::Init(skse);
-    g_pluginHandle = skse->GetPluginHandle();
+    Settings::ApplyLogLevel();
 
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
-    SettingsUI::Register();
 
     logger::info("[IvyShowPlayerInMenus] Plugin loaded.");
 

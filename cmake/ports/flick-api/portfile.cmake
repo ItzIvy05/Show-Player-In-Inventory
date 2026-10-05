@@ -1,0 +1,6 @@
+vcpkg_from_github(OUT_SOURCE_PATH FLICK_PATH REPO Fuzzlesz/FUCK_API REF a9ce5d17ebe095e3f11e2d9acd34534fd3d066c9 SHA512 6c86fc17c7ff3fcd6e321a077ee563cdcd12e7cc95bc40d60435531a3cff7fffcaf12a1e0087030068968757794dc4438211478ca7f643e453a4c1723791b3db HEAD_REF main)
+vcpkg_from_github(OUT_SOURCE_PATH IMGUI_PATH REPO powerof3/imgui REF fbbe3efd107e960f864d2944fdf280b465110bad SHA512 33909f0161af0052158adc5a3469df750718b65bbedc6df20f50b568a1c9a22c4f71a1f3de215bc0002c4389c6e7598009eca63ba77c1aef2d564ab5a5560d5c HEAD_REF features/precisetextshadows)
+
+file(INSTALL "${FLICK_PATH}/FUCK_API.h" "${IMGUI_PATH}/imgui.h" "${IMGUI_PATH}/imconfig.h" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/imconfig.h" "//#define IMGUI_USE_WCHAR32" "#define IMGUI_USE_WCHAR32")
+vcpkg_install_copyright(FILE_LIST "${FLICK_PATH}/LICENSE.md" "${IMGUI_PATH}/LICENSE.txt")
