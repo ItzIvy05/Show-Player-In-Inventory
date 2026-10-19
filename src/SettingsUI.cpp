@@ -254,11 +254,12 @@ namespace
         FUCK::Spacing();
         FUCK::SeparatorText("$SPII_Camera"_T);
 
+        Checkbox("$SPII_TurnCharacter"_T, values.turnCharacter, "$SPII_TurnCharacterTT"_T);
         Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
         Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
 
         auto* camera = MenuCamera::GetSingleton();
-        if (!values.cameraControls && !camera->DrawPositionSliders()) {
+        if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
             FUCK::TextDisabled("%s", "$SPII_SlidersClosed"_T);
         }
 

@@ -21,8 +21,12 @@ namespace
     // where skyui's list panel comes to rest in its menus once it has slid in (InventoryLists.swf: from -100 to 25 as the menu opens)
     constexpr float PANEL_REST_X = 25.0f;
 
-    // how far the position sliders go, in game units, when the camera controls are off
+    // how far the position sliders go, in game units
     constexpr float SLIDER_RANGE = 200.0f;
+
+    // the field of view slider's range, in degrees
+    constexpr float FOV_MIN = 20.0f;
+    constexpr float FOV_MAX = 120.0f;
 
     // FUCK-RACE's prompt lock, plus quantity and book menus
     bool IsPromptOpen()
@@ -130,6 +134,40 @@ namespace
         data->source = RE::NiPointer<RE::TESObjectREFR>(actor);
         data->action = RE::BGSDefaultObjectManager::GetSingleton()->GetObject<RE::BGSAction>(id);
         data->Process();
+    }
+
+    // turns the third-person camera round the player to their front, so they're seen face on without turning. FUCK's base holds the camera from there
+    void MoveCameraToFront(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
+    {
+        auto* root = camera->cameraRoot.get();
+        if (!root) {
+            return;
+        }
+
+        // headings as the game measures them, from +y towards +x. the camera looks down its own y axis
+        auto& rotate = root->local.rotate;
+        const float cameraHeading = std::atan2(rotate.entry[0][1], rotate.entry[1][1]);
+        const float turn = player->GetAngleZ() + RE::NI_PI - cameraHeading;
+
+        // turns a direction's heading by the angle above, leaving height alone
+        const float c = std::cos(turn);
+        const float s = std::sin(turn);
+        const auto turned = [&](const RE::NiPoint3& v) { return RE::NiPoint3{ v.x * c + v.y * s, v.y * c - v.x * s, v.z }; };
+
+        const RE::NiPoint3 pivot = player->GetPosition();
+        const RE::NiPoint3 offset = turned(root->local.translate - pivot);
+        root->local.translate = { pivot.x + offset.x, pivot.y + offset.y, root->local.translate.z };
+
+        // each axis is a column
+        for (int column = 0; column < 3; ++column) {
+            const auto axis = turned({ rotate.entry[0][column], rotate.entry[1][column], rotate.entry[2][column] });
+            rotate.entry[0][column] = axis.x;
+            rotate.entry[1][column] = axis.y;
+            rotate.entry[2][column] = axis.z;
+        }
+
+        RE::NiUpdateData data{};
+        root->Update(data);
     }
 
     template <class T>
@@ -316,13 +354,21 @@ void MenuCamera::Start()
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
+    // either the player turns to face the camera, or the camera comes round to face them
+    if (!Settings::values.turnCharacter) {
+        MoveCameraToFront(player, camera);
+    }
+
     // FUCK's camera goes on last, once the camera above is ready.
     // resumable, so another plugin's camera pauses this one rather than ending it
     FUCK::CameraSessionOptions options;
     options.client = this;
     options.base = FUCK::CameraBase::kThirdPerson;
     // no keyboard camera keys, as the menu uses them for its list and tabs
-    options.flags = FUCK::CameraSessionFlags::kFaceCamera | FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard;
+    options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard;
+    if (Settings::values.turnCharacter) {
+        options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
+    }
 
     // otherwise it starts from the default framing every time
     if (Settings::values.rememberCamera) {
@@ -370,7 +416,7 @@ void MenuCamera::Stop()
         camera->ForceFirstPerson();
     }
 
-    // FUCK turns the player by their heading, so this puts them back to how they were facing
+    // FUCK turns the player by their heading to face the camera, so this puts them back to how they were facing
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
     player->SetGraphVariableBool("IsNPC", headtrackingEnabled);
@@ -409,7 +455,7 @@ void MenuCamera::Update(float interval)
     FUCK::UpdateCamera(this, interval);
 }
 
-// FUCK's offsets on the framing, as right, forward and up, for the settings' sliders when the camera controls are off
+// FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
 bool MenuCamera::DrawPositionSliders()
 {
     FUCK::CameraOffsets offsets;
@@ -421,6 +467,11 @@ bool MenuCamera::DrawPositionSliders()
     changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -SLIDER_RANGE, SLIDER_RANGE, "%.0f");
     changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, SLIDER_RANGE, -SLIDER_RANGE, "%.0f");
     changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -SLIDER_RANGE, SLIDER_RANGE, "%.0f");
+
+    // 0 until FUCK knows the game's field of view
+    if (offsets.fov > 0.0f) {
+        changed |= FUCK::SliderFloat("$SPII_SliderFOV"_T, &offsets.fov, FOV_MIN, FOV_MAX, "%.0f");
+    }
 
     if (changed) {
         FUCK::SetCameraOffsets(this, offsets);
@@ -463,7 +514,7 @@ void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)
     // FUCK's own menu is driven by the controller while it's open
     state.gamepadBlocked = FUCK::IsMenuOpen();
 
-    // the position sliders in the settings take the place of the camera controls when they're off, and turning stays
+    // off, only the settings' sliders move the camera, and turning stays
     state.cameraMoves = Settings::values.cameraControls;
 
     // a press on the item list is the list's, so it doesn't turn or move anything. decided as the buttons go down, and kept while they're held
