@@ -28,6 +28,9 @@ namespace
     constexpr float FOV_MIN = 20.0f;
     constexpr float FOV_MAX = 120.0f;
 
+    // faster than this as the menu opens and the player counts as moving, so the view stays behind them. walking is around 80
+    constexpr float MOVING_SPEED = 50.0f;
+
     // FUCK-RACE's prompt lock, plus quantity and book menus
     bool IsPromptOpen()
     {
@@ -156,6 +159,87 @@ namespace
         }
     }
 
+    // the face as the menu caught it. expression mods run on papyrus, which stops in a paused menu, so a face caught mid-blink or mid-expression
+    // would hold for the whole menu. it eases to neutral with the eyes open instead, and goes back as it was after. thank you to Menu Studio again
+    struct SavedFace
+    {
+        std::vector<float> expression;
+        std::vector<float> modifier;
+        std::vector<float> phoneme;
+        bool exprOverride = false;
+        bool saved = false;
+    };
+    SavedFace savedFace;
+
+    void CopyOut(const RE::BSFaceGenKeyframeMultiple& keyframe, std::vector<float>& out)
+    {
+        if (keyframe.values && keyframe.count > 0) {
+            out.assign(keyframe.values, keyframe.values + keyframe.count);
+        } else {
+            out.clear();
+        }
+    }
+
+    void CopyIn(RE::BSFaceGenKeyframeMultiple& keyframe, const std::vector<float>& in)
+    {
+        if (keyframe.values && keyframe.count == in.size() && !in.empty()) {
+            std::copy(in.begin(), in.end(), keyframe.values);
+            keyframe.isUpdated = true;
+        }
+    }
+
+    void OpenEyes(RE::BSFaceGenAnimationData* face)
+    {
+        using Modifier = RE::BSFaceGenKeyframeMultiple::Modifier;
+        if (auto& modifier = face->modifierKeyFrame; modifier.values && modifier.count > Modifier::BlinkRight) {
+            modifier.values[Modifier::BlinkLeft] = 0.0f;
+            modifier.values[Modifier::BlinkRight] = 0.0f;
+        }
+    }
+
+    void NeutralFace(RE::PlayerCharacter* player)
+    {
+        auto* face = player->GetFaceGenAnimationData();
+        if (!face) {
+            return;
+        }
+
+        CopyOut(face->expressionKeyFrame, savedFace.expression);
+        CopyOut(face->modifierKeyFrame, savedFace.modifier);
+        CopyOut(face->phenomeKeyFrame, savedFace.phoneme);
+        savedFace.exprOverride = face->exprOverride;
+        savedFace.saved = true;
+
+        // an expression mod's override would stop the reset, so it's lifted for the menu and handed back after
+        face->ClearExpressionOverride();
+        face->Reset(0.25f, true, true, false, false);
+
+        // the eyelids open at once rather than easing, and the next blink waits a moment
+        OpenEyes(face);
+        face->eyesBlinkingTimer = 3.0f;
+    }
+
+    void RestoreFace(RE::PlayerCharacter* player)
+    {
+        if (!savedFace.saved) {
+            return;
+        }
+        savedFace.saved = false;
+
+        auto* face = player->GetFaceGenAnimationData();
+        if (!face) {
+            return;
+        }
+
+        CopyIn(face->expressionKeyFrame, savedFace.expression);
+        CopyIn(face->modifierKeyFrame, savedFace.modifier);
+        CopyIn(face->phenomeKeyFrame, savedFace.phoneme);
+
+        // never a saved blink, which would leave the eyes half shut until the next one
+        OpenEyes(face);
+        face->exprOverride = savedFace.exprOverride;
+    }
+
     // turns the third-person camera round the player to their front, so they're seen face on without turning. FUCK's base holds the camera from there
     void MoveCameraToFront(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
     {
@@ -256,6 +340,25 @@ namespace
             logger::info("[MenuCamera] Installed item preview hook.");
         }
     };
+
+    // equipping in a paused menu skips telling the animation graph, so the player would keep the old weapon's idle until the menu closed.
+    // let through while the player is shown, as their animation is run here. thank you to Menu Studio for tracking this down
+    struct EquipNotifyHook
+    {
+        // the player's check for skipping the notice: false skips it, and it does while the game is paused. CommonLib declares it void
+        static bool CanNotify(RE::PlayerCharacter* a_this)
+        {
+            return MenuCamera::GetSingleton()->IsActive() || _CanNotify(a_this);
+        }
+
+        static void Install()
+        {
+            REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_PlayerCharacter[0] };
+            _CanNotify = vtbl.write_vfunc(0xB3, CanNotify);
+        }
+
+        static inline REL::Relocation<decltype(CanNotify)> _CanNotify;
+    };
 }
 
 void MenuCamera::InstallHooks()
@@ -266,6 +369,7 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::MagicMenu>::Install();
     AdvanceMovieHook<RE::BarterMenu>::Install();
     AdvanceMovieHook<RE::ContainerMenu>::Install();
+    EquipNotifyHook::Install();
     ApplyItemPreviews();
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
@@ -331,12 +435,15 @@ void MenuCamera::Start()
     // the player faces the camera, so their head would turn round to look where it looks
     headTrackingWasOn = player->AsActorState()->actorState2.headTracking;
     HoldHeadStill(player);
+    NeutralFace(player);
 
+    bool moving = false;
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
         process->ClearActionHeadtrackTarget(true);
 
         // zero the speed and play the game's own stop
         auto& speed = process->middleHigh->currentMovementSpeed;
+        moving = speed > MOVING_SPEED;
         if (speed > 0.0f) {
             speed = 0.0f;
             RE::PlayerControls::GetSingleton()->data.autoMove = false;
@@ -370,8 +477,8 @@ void MenuCamera::Start()
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
-    // either the player turns to face the camera, or the camera comes round to face them
-    if (!Settings::values.turnCharacter) {
+    // either the player turns to face the camera, or the camera comes round to face them. on the move the view stays behind them
+    if (!moving && !Settings::values.turnCharacter) {
         MoveCameraToFront(player, camera);
     }
 
@@ -382,7 +489,7 @@ void MenuCamera::Start()
     options.base = FUCK::CameraBase::kThirdPerson;
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
-    if (Settings::values.turnCharacter) {
+    if (!moving && Settings::values.turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
 
@@ -436,6 +543,7 @@ void MenuCamera::Stop()
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
     player->AsActorState()->actorState2.headTracking = headTrackingWasOn;
+    RestoreFace(player);
 
     camera->allowAutoVanityMode = allowAutoVanityMode;
     camera->worldFOV = worldFOV;
