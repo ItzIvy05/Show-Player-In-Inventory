@@ -136,6 +136,26 @@ namespace
         data->Process();
     }
 
+    // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
+    // reloading, e.g. a hair with physics, can pick a target up again. the graph's head tracking variables only report what it's doing
+    void HoldHeadStill(RE::Actor* actor)
+    {
+        actor->AsActorState()->actorState2.headTracking = false;
+
+        auto* process = actor->GetActorRuntimeData().currentProcess;
+        auto* high = process ? process->high : nullptr;
+        if (!high) {
+            return;
+        }
+
+        using HeadTrack = RE::HighProcessData::HEAD_TRACK_TYPE;
+        for (std::uint32_t i = 0; i < HeadTrack::kTotal; ++i) {
+            if (high->headTrackTarget[i]) {
+                high->ClearHeadtrackTarget(static_cast<HeadTrack>(i), false);
+            }
+        }
+    }
+
     // turns the third-person camera round the player to their front, so they're seen face on without turning. FUCK's base holds the camera from there
     void MoveCameraToFront(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
     {
@@ -309,12 +329,8 @@ void MenuCamera::Start()
     allowAutoVanityMode = camera->allowAutoVanityMode;
 
     // the player faces the camera, so their head would turn round to look where it looks
-    player->GetGraphVariableBool("IsNPC", headtrackingEnabled);
-    player->GetGraphVariableBool("bHeadTrackSpine", headTrackSpineEnabled);
-    player->GetGraphVariableBool("bUseEyeTracking", eyeTrackingEnabled);
-    player->SetGraphVariableBool("IsNPC", false);
-    player->SetGraphVariableBool("bHeadTrackSpine", false);
-    player->SetGraphVariableBool("bUseEyeTracking", false);
+    headTrackingWasOn = player->AsActorState()->actorState2.headTracking;
+    HoldHeadStill(player);
 
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
         process->ClearActionHeadtrackTarget(true);
@@ -364,8 +380,8 @@ void MenuCamera::Start()
     FUCK::CameraSessionOptions options;
     options.client = this;
     options.base = FUCK::CameraBase::kThirdPerson;
-    // no keyboard camera keys, as the menu uses them for its list and tabs
-    options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard;
+    // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
+    options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
     if (Settings::values.turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
@@ -419,9 +435,7 @@ void MenuCamera::Stop()
     // FUCK turns the player by their heading to face the camera, so this puts them back to how they were facing
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
-    player->SetGraphVariableBool("IsNPC", headtrackingEnabled);
-    player->SetGraphVariableBool("bHeadTrackSpine", headTrackSpineEnabled);
-    player->SetGraphVariableBool("bUseEyeTracking", eyeTrackingEnabled);
+    player->AsActorState()->actorState2.headTracking = headTrackingWasOn;
 
     camera->allowAutoVanityMode = allowAutoVanityMode;
     camera->worldFOV = worldFOV;
@@ -436,6 +450,8 @@ void MenuCamera::Update(float interval)
     if (!active) {
         return;
     }
+
+    HoldHeadStill(RE::PlayerCharacter::GetSingleton());
 
     // FUCK-RACE's cap, so one long frame can't skip the idle ahead
     interval = std::min(interval, 0.1f);

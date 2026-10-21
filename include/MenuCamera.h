@@ -38,9 +38,7 @@ private:
     bool active = false;
     bool cachedFirstPerson = false;
     bool cacheFrozen = false;
-    bool headtrackingEnabled = false;
-    bool headTrackSpineEnabled = false;
-    bool eyeTrackingEnabled = false;
+    bool headTrackingWasOn = false;
     bool allowAutoVanityMode = false;
     bool playerFrozen = false;
 
