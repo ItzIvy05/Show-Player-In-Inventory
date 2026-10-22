@@ -10,6 +10,7 @@ namespace Settings
         bool containerMenu = false;
         bool hideItemPreviews = false;
         bool animateCharacter = true;
+        bool allowMovement = false;
         bool turnCharacter = false;
         bool rememberCamera = true;
         bool cameraControls = true;

@@ -250,6 +250,9 @@ namespace
             MenuCamera::GetSingleton()->ApplyAnimation();
         }
 
+        if (Checkbox("$SPII_AllowMovement"_T, values.allowMovement, "$SPII_AllowMovementTT"_T)) {
+            MenuCamera::GetSingleton()->ApplyMovement();
+        }
 
         FUCK::Spacing();
         FUCK::SeparatorText("$SPII_Camera"_T);
@@ -294,6 +297,7 @@ namespace
             Settings::Save();
             EventProcessor::GetSingleton()->ApplyLiveSettings();
             MenuCamera::GetSingleton()->ApplyAnimation();
+            MenuCamera::GetSingleton()->ApplyMovement();
         }
         FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
     }

@@ -10,6 +10,7 @@ namespace
         { "bContainerMenu", &Settings::Values::containerMenu },
         { "bHideItemPreviews", &Settings::Values::hideItemPreviews },
         { "bAnimateCharacter", &Settings::Values::animateCharacter },
+        { "bAllowMovement", &Settings::Values::allowMovement },
         { "bTurnCharacter", &Settings::Values::turnCharacter },
         { "bRememberCamera", &Settings::Values::rememberCamera },
         { "bCameraControls", &Settings::Values::cameraControls },

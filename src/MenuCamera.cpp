@@ -8,7 +8,8 @@ namespace
 {
     using UEFlag = RE::ControlMap::UEFlag;
 
-    // pov switch and wheel zoom would move the game's own camera, and movement and looking keep the player still while time runs (skyrim souls)
+    // pov switch and wheel zoom would move the game's own camera, and movement and looking keep the player still while time runs (skyrim souls).
+    // with allow movement, movement is left on. looking stays locked, as turning the player is right-drag's
     constexpr std::array CONTROLS{ UEFlag::kPOVSwitch, UEFlag::kWheelZoom, UEFlag::kMovement, UEFlag::kLooking };
 
     // the body framed from the top of the screen nearly to the bottom, as -1 to 1 from the bottom up
@@ -140,7 +141,7 @@ namespace
     }
 
     // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
-    // reloading, e.g. a hair with physics, can pick a target up again. the graph's head tracking variables only report what it's doing
+    // reloading, e.g. a hair with physics, can pick a target up again. the graph's bHeadTracking only reports what it's doing
     void HoldHeadStill(RE::Actor* actor)
     {
         actor->AsActorState()->actorState2.headTracking = false;
@@ -411,7 +412,7 @@ void MenuCamera::OnPerspectiveUpdate(bool firstPerson)
     }
 }
 
-void MenuCamera::Start()
+void MenuCamera::Start(std::string_view menuName)
 {
     if (active) {
         return;
@@ -456,7 +457,7 @@ void MenuCamera::Start()
 
     auto* controlMap = RE::ControlMap::GetSingleton();
     for (const auto flag : CONTROLS) {
-        if (controlMap->AreControlsEnabled(flag)) {
+        if (controlMap->AreControlsEnabled(flag) && !(flag == UEFlag::kMovement && Settings::values.allowMovement)) {
             disabledControls.set(flag);
         }
     }
@@ -477,8 +478,11 @@ void MenuCamera::Start()
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
-    // either the player turns to face the camera, or the camera comes round to face them. on the move the view stays behind them
-    if (!moving && !Settings::values.turnCharacter) {
+    // either the player turns to face the camera, or the camera comes round to face them. on the move the view stays behind them.
+    // bartering or at a chest, the player faces the merchant or chest, so the camera would come round into it. they turn round instead
+    const bool facingTarget = menuName == RE::BarterMenu::MENU_NAME || menuName == RE::ContainerMenu::MENU_NAME;
+    const bool turnCharacter = Settings::values.turnCharacter || facingTarget;
+    if (!moving && !turnCharacter) {
         MoveCameraToFront(player, camera);
     }
 
@@ -489,12 +493,12 @@ void MenuCamera::Start()
     options.base = FUCK::CameraBase::kThirdPerson;
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
-    if (!moving && Settings::values.turnCharacter) {
+    if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
 
-    // otherwise it starts from the default framing every time
-    if (Settings::values.rememberCamera) {
+    // otherwise it starts from the default framing every time. not on the move, as the view is then from behind and the remembered one is from the front
+    if (Settings::values.rememberCamera && !moving) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
     }
     options.startFramed = true;
@@ -605,6 +609,24 @@ bool MenuCamera::DrawPositionSliders()
 }
 
 // freezes or thaws the player to match the setting, while a menu is open
+// movement is let through or locked as the setting changes, without waiting for the menu to open again
+void MenuCamera::ApplyMovement()
+{
+    if (!active) {
+        return;
+    }
+
+    auto* controlMap = RE::ControlMap::GetSingleton();
+    const bool locked = disabledControls.any(UEFlag::kMovement);
+    if (Settings::values.allowMovement && locked) {
+        controlMap->ToggleControls(UEFlag::kMovement, true, false);
+        disabledControls.reset(UEFlag::kMovement);
+    } else if (!Settings::values.allowMovement && !locked && controlMap->AreControlsEnabled(UEFlag::kMovement)) {
+        controlMap->ToggleControls(UEFlag::kMovement, false, false);
+        disabledControls.set(UEFlag::kMovement);
+    }
+}
+
 void MenuCamera::ApplyAnimation()
 {
     SetFrozen(active && !Settings::values.animateCharacter);

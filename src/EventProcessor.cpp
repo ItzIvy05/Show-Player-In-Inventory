@@ -95,7 +95,7 @@ void EventProcessor::ApplyLiveSettings()
     }
 
     if (Settings::values.enabled) {
-        MenuCamera::GetSingleton()->Start();
+        MenuCamera::GetSingleton()->Start(activeMenu);
     } else {
         MenuCamera::GetSingleton()->Stop();
     }
