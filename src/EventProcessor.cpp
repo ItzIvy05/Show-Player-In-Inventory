@@ -59,13 +59,11 @@ void EventProcessor::OnMenu(std::string_view menuName, bool opening)
         menuOpen = true;
         MenuCamera::GetSingleton()->SetCacheFrozen(true);
         activeMenu = menuName;
-        logger::info("[EventProcessor] Watched menu opened.");
         ApplyLiveSettings();
         return;
     }
 
     if (menuOpen && menuName == activeMenu) {
-        logger::info("[EventProcessor] Watched menu closed.");
         menuOpen = false;
         QueueStop();
         QueueVanillaMenuBlurClear();
