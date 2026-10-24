@@ -522,9 +522,11 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    // a ridden horse stops too, as it otherwise carries on turning
+    // a ridden horse stops too, as it otherwise carries on turning. not a flying mount (a dragon), which flies itself and is always moving,
+    // so it would keep the view behind the rider every time
     RE::NiPointer<RE::Actor> ridden;
-    if (mounted && player->GetMount(ridden) && ridden) {
+    const auto* riddenRace = mounted && player->GetMount(ridden) && ridden ? ridden->GetRace() : nullptr;
+    if (riddenRace && riddenRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
         if (auto* process = ridden->GetActorRuntimeData().currentProcess; process && process->middleHigh) {
             auto& speed = process->middleHigh->currentMovementSpeed;
             moving = moving || speed > MOVING_SPEED;
@@ -559,8 +561,8 @@ void MenuCamera::Start(std::string_view menuName)
     // how the one shown meets the camera:
     // - they turn to face it: a follower, or the player with Turn Character on
     // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
-    //   lying down, or riding, as turning them would take them off the seat or bed, and the game brings a rider round on their horse over
-    //   several frames, seen as a spin
+    //   lying down, or riding (a dragon too, whose wings and neck fill the view from behind), as turning them would take them off the seat
+    //   or bed, and the game brings a rider round on their mount over several frames, seen as a spin
     // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
     const bool seated = sitting || lying;

@@ -452,9 +452,10 @@ namespace
         }
 
         // a rider's horse is shown too: its feet are the floor, and sight lines also go along its body, from the chest to the rump at the
-        // height of its legs and its back. headings run from +y towards +x
+        // height of its legs and its back. headings run from +y towards +x. not a flying mount (a dragon), which is framed out of view
         RE::NiPointer<RE::Actor> mount;
-        if (subject->IsOnMount() && subject->GetMount(mount) && mount) {
+        const auto* mountRace = subject->IsOnMount() && subject->GetMount(mount) && mount ? mount->GetRace() : nullptr;
+        if (mountRace && mountRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
             constexpr float HORSE_REACH = 90.0f;
             const RE::NiPoint3 base = mount->GetPosition();
             const float heading = mount->GetAngleZ();
