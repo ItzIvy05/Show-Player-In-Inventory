@@ -1,4 +1,5 @@
 #include "MenuCamera.h"
+#include "Obstructions.h"
 #include "SettingsUI.h"
 
 // windows.h macro
@@ -647,6 +648,7 @@ void MenuCamera::Stop()
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
     HoldReplayedEvents(nullptr);
+    Obstructions::RestoreAll();
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
@@ -705,6 +707,9 @@ void MenuCamera::Update(float interval)
 
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
+
+    // once the camera is placed, so it's what this frame sees from
+    Obstructions::Update(interval, subject);
 }
 
 // FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders

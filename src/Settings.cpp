@@ -14,6 +14,7 @@ namespace
         { "bAllowMovement", &Settings::Values::allowMovement },
         { "bTurnCharacter", &Settings::Values::turnCharacter },
         { "bRememberCamera", &Settings::Values::rememberCamera },
+        { "bHideObstructions", &Settings::Values::hideObstructions },
         { "bCameraControls", &Settings::Values::cameraControls },
         { "bTutorialSeen", &Settings::Values::tutorialSeen },
     } };

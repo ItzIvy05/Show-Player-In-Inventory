@@ -14,6 +14,7 @@ namespace Settings
         bool allowMovement = false;
         bool turnCharacter = false;
         bool rememberCamera = true;
+        bool hideObstructions = false;
         bool cameraControls = true;
         bool tutorialSeen = false;
     };

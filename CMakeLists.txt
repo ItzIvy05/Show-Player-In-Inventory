@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-if(NOT DEFINED ENV{COMMONLIB_SSE_FOLDER})
+if(NOT DEFINED ENV{COMMONLIBSSE_NG_ROOT})
     message(FATAL_ERROR "Missing COMMONLIB_SSE_FOLDER environment variable")
 endif()
 
@@ -19,7 +19,7 @@ set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(REX_OPTION_INI ON CACHE BOOL "" FORCE)
 
-set(COMMONLIB_SOURCE_DIR "$ENV{COMMONLIB_SSE_FOLDER}")
+set(COMMONLIB_SOURCE_DIR "$ENV{COMMONLIBSSE_NG_ROOT}")
 add_subdirectory("${COMMONLIB_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build")
 get_target_property(COMMONLIB_SRC_DIR CommonLibSSE SOURCE_DIR)
 include("${COMMONLIB_SRC_DIR}/cmake/CommonLibSSE.cmake")
@@ -32,6 +32,7 @@ set(IVY_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EventProcessor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/MenuCamera.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Obstructions.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Settings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsUI.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ViewSwitchFix.cpp"
@@ -41,6 +42,7 @@ set(IVY_SOURCES
 set(IVY_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EventProcessor.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/MenuCamera.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Obstructions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/PCH.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/SettingsUI.h"

@@ -260,6 +260,7 @@ namespace
 
         Checkbox("$SPII_TurnCharacter"_T, values.turnCharacter, "$SPII_TurnCharacterTT"_T);
         Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
+        Checkbox("$SPII_HideObstructions"_T, values.hideObstructions, "$SPII_HideObstructionsTT"_T);
         Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
 
         auto* camera = MenuCamera::GetSingleton();
