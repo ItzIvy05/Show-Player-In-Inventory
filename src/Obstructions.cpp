@@ -153,7 +153,7 @@ namespace
 
 
     // whether any part of a box is on screen, from its corners (numbered so each bit picks a side on one axis). anything reaching behind the camera
-    // only counts from where it passes the camera, so a beam running overhead from behind isn't on screen....hopefully
+    // only counts from where it passes the camera, so a beam running overhead from behind isn't on screen
     bool OnScreen(const View& view, const std::array<RE::NiPoint3, 8>& corners)
     {
         constexpr float NEAR_PLANE = 1.0f;
@@ -451,6 +451,23 @@ namespace
             body.targets.push_back(point - side);
         }
 
+        // a rider's horse is shown too: its feet are the floor, and sight lines also go along its body, from the chest to the rump at the
+        // height of its legs and its back. headings run from +y towards +x
+        RE::NiPointer<RE::Actor> mount;
+        if (subject->IsOnMount() && subject->GetMount(mount) && mount) {
+            constexpr float HORSE_REACH = 90.0f;
+            const RE::NiPoint3 base = mount->GetPosition();
+            const float heading = mount->GetAngleZ();
+            const RE::NiPoint3 along{ std::sin(heading), std::cos(heading), 0.0f };
+            body.feetZ = base.z;
+            for (const float reach : { -HORSE_REACH, 0.0f, HORSE_REACH }) {
+                body.bones.push_back(base + along * reach + up * 110.0f);
+                for (const float height : { 60.0f, 130.0f }) {
+                    body.targets.push_back(base + along * reach + up * height);
+                }
+            }
+        }
+
         body.nearDepth = std::numeric_limits<float>::max();
         for (const auto& bone : body.bones) {
             body.nearDepth = std::min(body.nearDepth, view.Depth(bone));
@@ -474,8 +491,8 @@ namespace
         const bool settling = sinceMoved < SETTLE;
 
         RE::NiPointer<RE::Actor> mount;
-        if (subject->IsOnMount()) {
-            subject->GetMount(mount);
+        if (subject->IsOnMount() && !subject->GetMount(mount)) {
+            mount.reset();
         }
 
         std::vector<RE::TESObjectREFR*> blocking;

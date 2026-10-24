@@ -246,10 +246,17 @@ namespace
 
         if (BeginCheckboxes("##General")) {
             FUCK::TableNextColumn();
-            Checkbox("$SPII_MagicMenu"_T, values.magicMenu, "$SPII_MagicMenuTT"_T);
-            Checkbox("$SPII_BarterMenu"_T, values.barterMenu, "$SPII_BarterMenuTT"_T);
-            Checkbox("$SPII_ContainerMenu"_T, values.containerMenu, "$SPII_ContainerMenuTT"_T);
+            Checkbox("$SPII_MagicMenu"_T,         values.magicMenu,         "$SPII_MagicMenuTT"_T);
+            Checkbox("$SPII_BarterMenu"_T,        values.barterMenu,        "$SPII_BarterMenuTT"_T);
+            Checkbox("$SPII_ContainerMenu"_T,     values.containerMenu,     "$SPII_ContainerMenuTT"_T);
             Checkbox("$SPII_FollowerInventory"_T, values.followerInventory, "$SPII_FollowerInventoryTT"_T);
+            Checkbox("$SPII_ShowInCombat"_T,      values.showInCombat,      "$SPII_ShowInCombatTT"_T);
+            Checkbox("$SPII_ShowOnHorseback"_T,   values.showOnHorseback,   "$SPII_ShowOnHorsebackTT"_T);
+            Checkbox("$SPII_ShowSitting"_T,       values.showSitting,       "$SPII_ShowSittingTT"_T);
+            
+            if (Settings::CanLieDown()) {
+                Checkbox("$SPII_ShowSleeping"_T, values.showSleeping, "$SPII_ShowSleepingTT"_T);
+            }
 
             FUCK::TableNextColumn();
             if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
@@ -272,7 +279,7 @@ namespace
 
         if (BeginCheckboxes("##Camera")) {
             FUCK::TableNextColumn();
-            Checkbox("$SPII_TurnCharacter"_T, values.turnCharacter, "$SPII_TurnCharacterTT"_T);
+            Checkbox("$SPII_TurnCharacter"_T,    values.turnCharacter,    "$SPII_TurnCharacterTT"_T);
             Checkbox("$SPII_HideObstructions"_T, values.hideObstructions, "$SPII_HideObstructionsTT"_T);
 
             FUCK::TableNextColumn();

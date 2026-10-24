@@ -41,6 +41,9 @@ private:
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
     float followerAngleZ = 0.0f;
+
+    // the horse of the one shown while they ride
+    RE::ActorHandle mount;
     float worldFOV = 0.0f;
 
     bool active = false;

@@ -4,19 +4,23 @@ namespace
 {
     // the settings and their ini keys. defaults come from Values, and only values that differ are written
     const FUCK::INI::Fields<Settings::Values> FIELDS{ "General", {
-        { "bEnable", &Settings::Values::enabled },
-        { "bMagicMenu", &Settings::Values::magicMenu },
-        { "bBarterMenu", &Settings::Values::barterMenu },
-        { "bContainerMenu", &Settings::Values::containerMenu },
+        { "bEnable",            &Settings::Values::enabled },
+        { "bMagicMenu",         &Settings::Values::magicMenu },
+        { "bBarterMenu",        &Settings::Values::barterMenu },
+        { "bContainerMenu",     &Settings::Values::containerMenu },
         { "bFollowerInventory", &Settings::Values::followerInventory },
-        { "bHideItemPreviews", &Settings::Values::hideItemPreviews },
-        { "bAnimateCharacter", &Settings::Values::animateCharacter },
-        { "bAllowMovement", &Settings::Values::allowMovement },
-        { "bTurnCharacter", &Settings::Values::turnCharacter },
-        { "bRememberCamera", &Settings::Values::rememberCamera },
-        { "bHideObstructions", &Settings::Values::hideObstructions },
-        { "bCameraControls", &Settings::Values::cameraControls },
-        { "bTutorialSeen", &Settings::Values::tutorialSeen },
+        { "bShowInCombat",      &Settings::Values::showInCombat },
+        { "bShowOnHorseback",   &Settings::Values::showOnHorseback },
+        { "bShowSitting",       &Settings::Values::showSitting },
+        { "bShowSleeping",      &Settings::Values::showSleeping },
+        { "bHideItemPreviews",  &Settings::Values::hideItemPreviews },
+        { "bAnimateCharacter",  &Settings::Values::animateCharacter },
+        { "bAllowMovement",     &Settings::Values::allowMovement },
+        { "bTurnCharacter",     &Settings::Values::turnCharacter },
+        { "bRememberCamera",    &Settings::Values::rememberCamera },
+        { "bHideObstructions",  &Settings::Values::hideObstructions },
+        { "bCameraControls",    &Settings::Values::cameraControls },
+        { "bTutorialSeen",      &Settings::Values::tutorialSeen },
     } };
 
     FUCK::PluginSettings& GetINI()
@@ -76,6 +80,12 @@ namespace Settings
         }
 
         return false;
+    }
+
+    bool CanLieDown()
+    {
+        static const bool installed = GetModuleHandleW(L"GoToBed.dll") != nullptr;
+        return installed;
     }
 
     // the container menu's NPC mode is a follower's "let's trade", or a mod opening someone's inventory. bodies and pickpocketing have modes of their own

@@ -242,40 +242,6 @@ namespace
         face->exprOverride = savedFace.exprOverride;
     }
 
-    // turns the third-person camera round the player to their front, so they're seen face on without turning. FUCK's base holds the camera from there
-    void MoveCameraToFront(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
-    {
-        auto* root = camera->cameraRoot.get();
-        if (!root) {
-            return;
-        }
-
-        // headings as the game measures them, from +y towards +x. the camera looks down its own y axis
-        auto& rotate = root->local.rotate;
-        const float cameraHeading = std::atan2(rotate.entry[0][1], rotate.entry[1][1]);
-        const float turn = player->GetAngleZ() + RE::NI_PI - cameraHeading;
-
-        // turns a direction's heading by the angle above, leaving height alone
-        const float c = std::cos(turn);
-        const float s = std::sin(turn);
-        const auto turned = [&](const RE::NiPoint3& v) { return RE::NiPoint3{ v.x * c + v.y * s, v.y * c - v.x * s, v.z }; };
-
-        const RE::NiPoint3 pivot = player->GetPosition();
-        const RE::NiPoint3 offset = turned(root->local.translate - pivot);
-        root->local.translate = { pivot.x + offset.x, pivot.y + offset.y, root->local.translate.z };
-
-        // each axis is a column
-        for (int column = 0; column < 3; ++column) {
-            const auto axis = turned({ rotate.entry[0][column], rotate.entry[1][column], rotate.entry[2][column] });
-            rotate.entry[0][column] = axis.x;
-            rotate.entry[1][column] = axis.y;
-            rotate.entry[2][column] = axis.z;
-        }
-
-        RE::NiUpdateData data{};
-        root->Update(data);
-    }
-
     template <class T>
     struct PerspectiveHook
     {
@@ -508,11 +474,19 @@ void MenuCamera::Start(std::string_view menuName)
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
 
-    // sitting, sleeping and riding have their own cameras, and the free camera isn't the player's, so switching to third person would break them
-    const bool sitSleep = player->AsActorState()->GetSitSleepState() != RE::SIT_SLEEP_STATE::kNormal;
+    // combat, riding, sitting, and lying down only as their settings allow, and never while sitting down or getting up. a rider counts as
+    // sitting to the game, so riding is told apart from a seat, and lying down is told from the pose, as a bed can report either state
+    const auto sitSleep = player->AsActorState()->GetSitSleepState();
+    const bool mounted = player->IsOnMount();
+    const bool inFurniture = !mounted && (sitSleep == RE::SIT_SLEEP_STATE::kIsSitting || sitSleep == RE::SIT_SLEEP_STATE::kIsSleeping);
+    const bool lying = inFurniture && FUCK::IsLyingDown(player);
+    const bool sitting = inFurniture && !lying;
+    const bool settled = sitSleep == RE::SIT_SLEEP_STATE::kNormal || sitSleep == RE::SIT_SLEEP_STATE::kIsSitting || sitSleep == RE::SIT_SLEEP_STATE::kIsSleeping;
+    const bool seatAllowed = settled && (!sitting || Settings::values.showSitting) && (!lying || (Settings::values.showSleeping && Settings::CanLieDown()));
+    const bool allowed = seatAllowed && (!mounted || Settings::values.showOnHorseback) && (!player->IsInCombat() || Settings::values.showInCombat);
+    // the furniture and free cameras aren't the player's own, so switching either to third person would break it
     const bool ownCamera = camera->IsInFreeCameraMode() || camera->currentState->id == RE::CameraState::kFurniture;
-    if (player->IsInCombat() || player->IsOnMount() || sitSleep || ownCamera) {
-        logger::info("[MenuCamera] Skipped start. Player is in combat, on horseback, sitting or sleeping, or in the free camera.");
+    if (!allowed || ownCamera) {
         return;
     }
 
@@ -548,6 +522,17 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
+    // a ridden horse stops too, as it otherwise carries on turning
+    RE::NiPointer<RE::Actor> ridden;
+    if (mounted && player->GetMount(ridden) && ridden) {
+        if (auto* process = ridden->GetActorRuntimeData().currentProcess; process && process->middleHigh) {
+            auto& speed = process->middleHigh->currentMovementSpeed;
+            moving = moving || speed > MOVING_SPEED;
+            speed = 0.0f;
+        }
+        PerformAction(ridden.get(), RE::DEFAULT_OBJECT::kActionMoveStop);
+    }
+
     auto* controlMap = RE::ControlMap::GetSingleton();
     for (const auto flag : CONTROLS) {
         if (controlMap->AreControlsEnabled(flag) && !(flag == UEFlag::kMovement && Settings::values.allowMovement)) {
@@ -571,15 +556,23 @@ void MenuCamera::Start(std::string_view menuName)
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
-    // how the one shown ends up facing the camera:
-    // - looting, the player stays as they are (at the chest, crouched or kneeling), as turning them away from it looks wrong
-    // - a follower turns to face the camera
-    // - otherwise Turn Character decides whether they turn or the camera comes round to their front. on the move neither happens, so the
-    //   view stays behind them
+    // how the one shown meets the camera:
+    // - they turn to face it: a follower, or the player with Turn Character on
+    // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
+    //   lying down, or riding, as turning them would take them off the seat or bed, and the game brings a rider round on their horse over
+    //   several frames, seen as a spin
+    // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
-    const bool turnCharacter = shownFollower != nullptr || (Settings::values.turnCharacter && !looting);
-    if (!moving && !looting && !turnCharacter) {
-        MoveCameraToFront(player, camera);
+    const bool seated = sitting || lying;
+    const bool riding = subject->IsOnMount();
+    const bool turnCharacter = !riding && (shownFollower != nullptr || (Settings::values.turnCharacter && !looting && !seated));
+    const bool cameraToFront = !moving && !looting && !turnCharacter;
+
+    // a rider's horse, animated with them in a paused menu
+    mount = {};
+    RE::NiPointer<RE::Actor> horse;
+    if (riding && subject->GetMount(horse) && horse) {
+        mount = horse->GetHandle();
     }
 
     // FUCK's camera goes on last, once the camera above is ready. resumable, so another plugin's camera pauses it rather than ending it
@@ -592,15 +585,23 @@ void MenuCamera::Start(std::string_view menuName)
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
+    if (cameraToFront) {
+        options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
+    }
+
+    // no turning at a chest, on a seat, in a bed or on a horse, where it would look wrong
+    if (looting || seated || riding) {
+        options.flags |= FUCK::CameraSessionFlags::kNoTurning;
+    }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
-    // remembered one is from the front, and not in containers, which frame the one shown as they stand
-    if (Settings::values.rememberCamera && !moving && menuName != RE::ContainerMenu::MENU_NAME) {
+    // remembered one is from the front, nor in containers, riding, seated or lying down, as a remembered angle wouldn't suit the spot
+    if (Settings::values.rememberCamera && !moving && !mounted && !seated && menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
     }
 
-    // an animation can kneel the player at a chest and stand them up again, so the framing follows while looting
-    if (looting) {
+    // an animation can kneel the player at a chest, or settle them into a seat or bed, so the framing follows
+    if (looting || seated) {
         options.flags |= FUCK::CameraSessionFlags::kFollowPose;
     }
     options.startFramed = true;
@@ -655,6 +656,8 @@ void MenuCamera::Stop()
     }
     follower = {};
 
+    mount = {};
+
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
 
@@ -676,14 +679,21 @@ void MenuCamera::Update(float interval)
     // FUCK-RACE's cap, so one long frame can't skip the idle ahead
     interval = std::min(interval, 0.1f);
 
-    // a paused world skips the animation and scene update of the one shown, so it's done here. with skyrim souls the game runs it itself
+    // a paused world skips the animation and scene update of the one shown and their horse, so it's done here. with skyrim souls the game
+    // runs it itself. the horse first, as the rider sits on it
     const bool paused = RE::UI::GetSingleton()->GameIsPaused();
     if (!playerFrozen && paused) {
-        subject->UpdateAnimation(interval);
+        const auto horse = mount.get();
+        for (auto* actor : { horse.get(), subject }) {
+            if (!actor) {
+                continue;
+            }
 
-        if (auto* root = subject->Get3D(false)) {
-            RE::NiUpdateData data{};
-            root->Update(data);
+            actor->UpdateAnimation(interval);
+            if (auto* root = actor->Get3D(false)) {
+                RE::NiUpdateData data{};
+                root->Update(data);
+            }
         }
     }
     HoldReplayedEvents(paused ? subject : nullptr);
