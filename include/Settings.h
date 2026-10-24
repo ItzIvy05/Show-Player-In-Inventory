@@ -2,6 +2,7 @@
 
 namespace Settings
 {
+    //default setting values
     struct Values
     {
         bool enabled           = true;
@@ -15,10 +16,10 @@ namespace Settings
         bool showSleeping      = true;
         bool hideItemPreviews  = false;
         bool animateCharacter  = true;
-        bool allowMovement     = false;
+        bool allowMovement     = true;
         bool turnCharacter     = false;
-        bool rememberCamera    = true;
-        bool hideObstructions  = false;
+        bool rememberCamera    = false;
+        bool hideObstructions  = true;
         bool cameraControls    = true;
         bool tutorialSeen      = false;
     };
