@@ -6,17 +6,17 @@
 // the hiding and the reference walk follow Menu Studio's declutter, thank you to its author
 namespace
 {
-    constexpr float CHECK_INTERVAL = 0.1f;  // seconds between checks, as the camera moves
-    constexpr float CORRIDOR = 25.0f;       // how far around a sight line something counts as in the way
-    constexpr float STOP_GAP = 40.0f;       // sight lines stop this far in front of the body, so what stands beside it or touches it stays
-    constexpr float BODY_WIDTH = 50.0f;     // sight lines also go this far either side of the body, across the view, so they widen like a cone
-    constexpr float FRONT_GAP = 60.0f;      // how far nearer than the body something must be to count as in front of it
-    constexpr float FLOOR_ROOM = 15.0f;     // anything whose top is no higher than this above the feet is floor, and stays
-    constexpr float LARGEST = 250.0f;       // bigger than this, something is hidden only when it's across a sight line, so a room keeps its walls
-    constexpr float REACH_PAD = 128.0f;     // searched this far past the camera's distance from the body
-    constexpr float LINGER = 1.0f;          // seconds something stays hidden after it's out of the way, so it doesn't flicker as the camera moves
-    constexpr float SETTLE = 2.0f;          // seconds after the camera or the one shown last moved that hidden things can still come back
-    constexpr float EFFECT_RADIUS = 16.0f;  // an effect with no size of its own (a candle's flame) is taken as a sphere this big
+    constexpr float CHECK_INTERVAL =   0.1f;  // seconds between checks, as the camera moves
+    constexpr float CORRIDOR       =  25.0f;  // how far around a sight line something counts as in the way
+    constexpr float STOP_GAP       =  40.0f;  // sight lines stop this far in front of the body, so what stands beside it or touches it stays
+    constexpr float BODY_WIDTH     =  50.0f;  // sight lines also go this far either side of the body, across the view, so they widen like a cone
+    constexpr float FRONT_GAP      =  60.0f;  // how far nearer than the body something must be to count as in front of it
+    constexpr float FLOOR_ROOM     =  15.0f;  // anything whose top is no higher than this above the feet is floor, and stays
+    constexpr float LARGEST        = 250.0f;  // bigger than this, something is hidden only when it's across a sight line, so a room keeps its walls
+    constexpr float REACH_PAD      = 128.0f;  // searched this far past the camera's distance from the body
+    constexpr float LINGER         =   1.0f;  // seconds something stays hidden after it's out of the way, so it doesn't flicker as the camera moves
+    constexpr float SETTLE         =   2.0f;  // seconds after the camera or the one shown last moved that hidden things can still come back
+    constexpr float EFFECT_RADIUS  =  16.0f;  // an effect with no size of its own (a candle's flame) is taken as a sphere this big
 
     struct Hidden
     {
@@ -150,7 +150,6 @@ namespace
         const float t = lengthSq > 0.0f ? std::clamp((p - a).Dot(ab) / lengthSq, 0.0f, 1.0f) : 0.0f;
         return p.GetDistance(a + ab * t);
     }
-
 
     // whether any part of a box is on screen, from its corners (numbered so each bit picks a side on one axis). anything reaching behind the camera
     // only counts from where it passes the camera, so a beam running overhead from behind isn't on screen
@@ -452,7 +451,7 @@ namespace
         }
 
         // a rider's horse is shown too: its feet are the floor, and sight lines also go along its body, from the chest to the rump at the
-        // height of its legs and its back. headings run from +y towards +x. not a flying mount (a dragon), which is framed out of view
+        // height of its legs and its back. headings run from +y towards +x. not a flying mount (a dragon), far too big to treat as the body
         RE::NiPointer<RE::Actor> mount;
         const auto* mountRace = subject->IsOnMount() && subject->GetMount(mount) && mount ? mount->GetRace() : nullptr;
         if (mountRace && mountRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
