@@ -4,8 +4,9 @@
 // only their drawing is switched off (the app cull flag), so nothing about them changes in the world or the save
 namespace Obstructions
 {
-    // each frame while someone is shown, after the camera's placed. checks a few times a second
-    void Update(float interval, RE::Actor* subject);
+    // each frame while someone is shown, after the camera's placed. checks a few times a second. shown is everyone in view with them
+    // (their horse, anyone they hold), who always stays
+    void Update(float interval, RE::Actor* subject, const std::vector<RE::Actor*>& shown);
 
     // brings back everything hidden here. safe to call any time
     void RestoreAll();

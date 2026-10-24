@@ -32,6 +32,8 @@ private:
     void OnCameraTakenOver() override;
 
     void SetFrozen(bool freeze);
+    [[nodiscard]] bool IsAnimatedHere(RE::Actor* actor) const;
+    [[nodiscard]] std::vector<RE::Actor*> GetShown() const;
 
     REX::EnumSet<RE::ControlMap::UEFlag, std::uint32_t> disabledControls;
 
@@ -44,6 +46,14 @@ private:
 
     // the horse of the one shown while they ride
     RE::ActorHandle mount;
+
+    // someone held by the one shown (carried, or riding behind them)
+    struct Held
+    {
+        RE::ActorHandle actor;
+        bool animated = true;  // false for an animal another mod poses itself
+    };
+    std::vector<Held> held;
     float worldFOV = 0.0f;
 
     bool active = false;

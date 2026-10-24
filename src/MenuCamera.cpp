@@ -30,6 +30,15 @@ namespace
     constexpr float FOV_MIN = 20.0f;
     constexpr float FOV_MAX = 120.0f;
 
+    // someone held by the one shown (carried, or riding behind them) has their 3D closer to them, or to their horse, than two people can
+    // stand. measured across the ground, as someone carried sits up at the carrier's arm or shoulder, and only so far up or down, so
+    // someone on the floor above or below isn't counted. a 3D further than HELD_REACH from its own actor is posed there by another mod
+    constexpr float HELD_REACH = 50.0f;
+    constexpr float HELD_HEIGHT = 250.0f;
+
+    // an animal posed in your arms by another mod sits further out in front of you, so it's looked for this far away
+    constexpr float POSED_REACH = 120.0f;
+
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
 
@@ -240,6 +249,40 @@ namespace
         // never a saved blink, which would leave the eyes half shut until the next one
         OpenEyes(face);
         face->exprOverride = savedFace.exprOverride;
+    }
+
+    // puts the third-person camera behind a horse on the move, a little above, looking down along the way it heads, so the framing starts
+    // from the same view however the camera was aimed or the ground sloped. FUCK's framing then sets how far back
+    void MoveCameraBehindMount(RE::Actor* mount, RE::Actor* rider, RE::PlayerCamera* camera)
+    {
+        constexpr float PITCH = 12.0f * RE::NI_PI / 180.0f;  // down from level
+        constexpr float BACK = 400.0f;                        // a starting distance, until framing sets it
+
+        auto* root = camera->cameraRoot.get();
+        auto* model = rider->Get3D(false);
+        auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr;
+        if (!root || !head) {
+            return;
+        }
+
+        // headings run from +y towards +x. each axis is a column: right, forward (the way the camera looks), then up the screen
+        const float heading = mount->GetAngleZ();
+        const float c = std::cos(PITCH);
+        const float s = std::sin(PITCH);
+        const RE::NiPoint3 along{ std::sin(heading), std::cos(heading), 0.0f };
+        const RE::NiPoint3 right{ along.y, -along.x, 0.0f };
+        const RE::NiPoint3 forward{ along.x * c, along.y * c, -s };
+        const RE::NiPoint3 up{ along.x * s, along.y * s, c };
+        auto& rotate = root->local.rotate;
+        for (int row = 0; row < 3; ++row) {
+            rotate.entry[row][0] = right[row];
+            rotate.entry[row][1] = forward[row];
+            rotate.entry[row][2] = up[row];
+        }
+        root->local.translate = head->world.translate - forward * BACK;
+
+        RE::NiUpdateData data{};
+        root->Update(data);
     }
 
     template <class T>
@@ -522,17 +565,21 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    // a ridden horse stops too, as it otherwise carries on turning. not a flying mount (a dragon), which flies itself and is always moving,
-    // so it would keep the view behind the rider every time
+    // the horse being ridden is stopped too, as it would otherwise carry on turning, unless Allow Movement lets you ride on. a flying mount
+    // (a dragon) is left alone: it flies itself and is always moving, so counting it would keep the view behind the rider every time
     RE::NiPointer<RE::Actor> ridden;
     const auto* riddenRace = mounted && player->GetMount(ridden) && ridden ? ridden->GetRace() : nullptr;
     if (riddenRace && riddenRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
         if (auto* process = ridden->GetActorRuntimeData().currentProcess; process && process->middleHigh) {
             auto& speed = process->middleHigh->currentMovementSpeed;
             moving = moving || speed > MOVING_SPEED;
-            speed = 0.0f;
+            if (!Settings::values.allowMovement) {
+                speed = 0.0f;
+            }
         }
-        PerformAction(ridden.get(), RE::DEFAULT_OBJECT::kActionMoveStop);
+        if (!Settings::values.allowMovement) {
+            PerformAction(ridden.get(), RE::DEFAULT_OBJECT::kActionMoveStop);
+        }
     }
 
     auto* controlMap = RE::ControlMap::GetSingleton();
@@ -558,23 +605,55 @@ void MenuCamera::Start(std::string_view menuName)
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
-    // how the one shown meets the camera:
-    // - they turn to face it: a follower, or the player with Turn Character on
-    // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
-    //   lying down, or riding (a dragon too, whose wings and neck fill the view from behind), as turning them would take them off the seat
-    //   or bed, and the game brings a rider round on their mount over several frames, seen as a spin
-    // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
-    const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
-    const bool seated = sitting || lying;
+    // a rider's horse is animated with them in a paused menu
     const bool riding = subject->IsOnMount();
-    const bool turnCharacter = !riding && (shownFollower != nullptr || (Settings::values.turnCharacter && !looting && !seated));
-    const bool cameraToFront = !moving && !looting && !turnCharacter;
-
-    // a rider's horse, animated with them in a paused menu
     mount = {};
     RE::NiPointer<RE::Actor> horse;
     if (riding && subject->GetMount(horse) && horse) {
         mount = horse->GetHandle();
+    }
+
+    // anyone the one shown is holding (carried, or riding behind them) is placed against them each frame by the mod doing the holding,
+    // which a paused menu skips, so they're animated here as well. they're found by their 3D, as Cat Carry parks a held animal's actor
+    // behind you while posing its 3D in your arms. that mod poses the animal and your arms round it itself, so neither is animated here
+    // (see IsAnimatedHere)
+    held.clear();
+    if (auto* processes = RE::ProcessLists::GetSingleton()) {
+        for (const auto& handle : processes->highActorHandles) {
+            const auto actor = handle.get();
+            auto* model = actor ? actor->Get3D(false) : nullptr;
+            if (!model || actor.get() == subject || actor.get() == horse.get()) {
+                continue;
+            }
+
+            const RE::NiPoint3 at = model->world.translate;
+            const RE::NiPoint3 actorAt = actor->GetPosition();
+            const bool posed = std::hypot(at.x - actorAt.x, at.y - actorAt.y) > HELD_REACH;
+            const float reach = posed ? POSED_REACH : HELD_REACH;
+            const auto closeTo = [&](const RE::NiPoint3& to) {
+                return std::hypot(at.x - to.x, at.y - to.y) < reach && std::abs(at.z - to.z) < HELD_HEIGHT;
+            };
+            if (closeTo(subject->GetPosition()) || (horse && closeTo(horse->GetPosition()))) {
+                held.push_back({ actor->GetHandle(), !posed });
+            }
+        }
+    }
+    const bool holding = !held.empty();
+
+    // how the one shown meets the camera:
+    // - they turn to face it: a follower, or the player with Turn Character on
+    // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
+    //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
+    //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
+    // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
+    const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
+    const bool seated = sitting || lying;
+    const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !looting && !seated));
+    const bool cameraToFront = !moving && !looting && !turnCharacter;
+
+    // on horseback on the move, the view behind starts from the same place each time, rather than wherever the camera was aimed
+    if (moving && horse) {
+        MoveCameraBehindMount(horse.get(), subject, camera);
     }
 
     // FUCK's camera goes on last, once the camera above is ready. resumable, so another plugin's camera pauses it rather than ending it
@@ -591,8 +670,8 @@ void MenuCamera::Start(std::string_view menuName)
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
 
-    // no turning at a chest, on a seat, in a bed or on a horse, where it would look wrong
-    if (looting || seated || riding) {
+    // no turning at a chest, on a seat, in a bed, on a horse, or holding someone, where it would look wrong
+    if (looting || seated || riding || holding) {
         options.flags |= FUCK::CameraSessionFlags::kNoTurning;
     }
 
@@ -660,6 +739,14 @@ void MenuCamera::Stop()
 
     mount = {};
 
+    // anyone held goes back to where the game has them, for the mod holding them to place again
+    for (const auto& one : held) {
+        if (const auto actor = one.actor.get()) {
+            actor->Update3DPosition(true);
+        }
+    }
+    held.clear();
+
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
 
@@ -691,13 +778,13 @@ void MenuCamera::Update(float interval)
     // FUCK-RACE's cap, so one long frame can't skip the idle ahead
     interval = std::min(interval, 0.1f);
 
-    // a paused world skips the animation and scene update of the one shown and their horse, so it's done here. with skyrim souls the game
-    // runs it itself. the horse first, as the rider sits on it
+    // a paused world skips the animation and scene update of the one shown, their horse, and anyone they hold, so it's done here (see
+    // IsAnimatedHere for who's left out). with skyrim souls the game runs it itself. the horse first, as the rider sits on it
     const bool paused = RE::UI::GetSingleton()->GameIsPaused();
+    const auto shown = GetShown();
     if (!playerFrozen && paused) {
-        const auto horse = mount.get();
-        for (auto* actor : { horse.get(), subject }) {
-            if (!actor) {
+        for (auto* actor : shown) {
+            if (!IsAnimatedHere(actor)) {
                 continue;
             }
 
@@ -714,7 +801,7 @@ void MenuCamera::Update(float interval)
     FUCK::UpdateCamera(this, interval);
 
     // once the camera is placed, so it's what this frame sees from
-    Obstructions::Update(interval, subject);
+    Obstructions::Update(interval, subject, shown);
 }
 
 // FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
@@ -766,6 +853,30 @@ void MenuCamera::ApplyAnimation()
     SetFrozen(active && !Settings::values.animateCharacter);
 }
 
+// everyone in view as part of the one shown: their horse, then them, then anyone they hold
+std::vector<RE::Actor*> MenuCamera::GetShown() const
+{
+    std::vector<RE::Actor*> shown;
+    if (const auto horse = mount.get()) {
+        shown.push_back(horse.get());
+    }
+    shown.push_back(GetSubject());
+    for (const auto& one : held) {
+        if (const auto actor = one.actor.get()) {
+            shown.push_back(actor.get());
+        }
+    }
+    return shown;
+}
+
+// whether this frame's animation is run here for someone shown: not for a held animal another mod poses itself, nor for the one holding
+// it, as that mod poses their arms round it too
+bool MenuCamera::IsAnimatedHere(RE::Actor* actor) const
+{
+    const auto posedBy = [&](const Held& one) { return !one.animated && (actor == GetSubject() || one.actor.get().get() == actor); };
+    return std::ranges::none_of(held, posedBy);
+}
+
 // FUCK holds the one shown still whether or not the game is paused (skyrim souls), eyes open
 void MenuCamera::SetFrozen(bool freeze)
 {
@@ -798,8 +909,8 @@ void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)
     state.cameraMoves = Settings::values.cameraControls;
 
     // a press on the item list is the list's, so it doesn't turn or move anything. decided as the buttons go down, and kept while they're held
-    const bool held = FUCK::IsInputDown(FUCK::Keys::kMouse_Right) || FUCK::IsInputDown(FUCK::Keys::kMouse_Middle);
-    if (!held) {
+    const bool buttonsDown = FUCK::IsInputDown(FUCK::Keys::kMouse_Right) || FUCK::IsInputDown(FUCK::Keys::kMouse_Middle);
+    if (!buttonsDown) {
         mouseOnList = IsCursorOverList();
     }
     state.mouseLocked = mouseOnList;

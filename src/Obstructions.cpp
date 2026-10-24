@@ -475,7 +475,7 @@ namespace
         return body;
     }
 
-    void Check(RE::Actor* subject, float elapsed)
+    void Check(RE::Actor* subject, const std::vector<RE::Actor*>& shown, float elapsed)
     {
         const auto view = GetView();
         const auto body = view ? GetBody(subject, *view) : std::nullopt;
@@ -499,8 +499,8 @@ namespace
         std::vector<RE::NiAVObject*> flames;
         const float reach = view->eye.GetDistance(subject->GetPosition()) + REACH_PAD;
         ForEachRefInRange(subject->GetPosition(), reach, [&](RE::TESObjectREFR& ref) {
-            // the one shown and their horse stay. the player is in the way like anyone else when a follower is shown
-            if (&ref == subject || &ref == mount.get() || ref.IsDisabled() || ref.IsDeleted()) {
+            // the one shown, their horse, and anyone they hold stay. the player is in the way like anyone else when a follower is shown
+            if (&ref == subject || &ref == mount.get() || std::ranges::find(shown, &ref) != shown.end() || ref.IsDisabled() || ref.IsDeleted()) {
                 return;
             }
 
@@ -557,7 +557,7 @@ namespace
 
 namespace Obstructions
 {
-    void Update(float interval, RE::Actor* subject)
+    void Update(float interval, RE::Actor* subject, const std::vector<RE::Actor*>& shown)
     {
         if (!Settings::values.hideObstructions || !subject) {
             RestoreAll();
@@ -569,7 +569,7 @@ namespace Obstructions
             return;
         }
 
-        Check(subject, sinceCheck);
+        Check(subject, shown, sinceCheck);
         sinceCheck = 0.0f;
     }
 
