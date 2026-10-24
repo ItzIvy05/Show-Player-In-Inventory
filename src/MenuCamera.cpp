@@ -678,6 +678,16 @@ void MenuCamera::Update(float interval)
     auto* subject = GetSubject();
     HoldHeadStill(subject);
 
+    // a mod can give back controls locked here (a paraglider landing), so they're locked again
+    if (disabledControls) {
+        auto* controlMap = RE::ControlMap::GetSingleton();
+        for (const auto flag : CONTROLS) {
+            if (disabledControls.any(flag) && controlMap->AreControlsEnabled(flag)) {
+                controlMap->ToggleControls(flag, false, false);
+            }
+        }
+    }
+
     // FUCK-RACE's cap, so one long frame can't skip the idle ahead
     interval = std::min(interval, 0.1f);
 
