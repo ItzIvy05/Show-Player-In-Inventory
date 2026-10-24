@@ -420,28 +420,11 @@ namespace
         Replays::shown = holder;
     }
 
-    // putting something on can send the actor "WeapOutRightReplaceForceEquip" (or the left-hand one), which draws their weapon. followers get it
-    // even for a helmet, so it's held back while whoever is shown has their weapon put away
-    bool DrawsPutAwayWeapon(const RE::IAnimationGraphManagerHolder* holder, const RE::BSFixedString& event)
-    {
-        const std::string_view name = event.c_str() ? event.c_str() : "";
-        if (name != "WeapOutRightReplaceForceEquip"sv && name != "WeapOutLeftReplaceForceEquip"sv) {
-            return false;
-        }
-
-        auto* camera = MenuCamera::GetSingleton();
-        auto* subject = camera->IsActive() ? camera->GetSubject() : nullptr;
-        return subject && static_cast<const RE::IAnimationGraphManagerHolder*>(subject) == holder && !subject->AsActorState()->IsWeaponDrawn();
-    }
-
     template <class T>
     struct AnimationEventHook
     {
         static bool Notify(RE::IAnimationGraphManagerHolder* a_this, const RE::BSFixedString& a_event)
         {
-            if (DrawsPutAwayWeapon(a_this, a_event)) {
-                return true;
-            }
             return Replays::Notify(a_this, a_event, _Notify);
         }
 
