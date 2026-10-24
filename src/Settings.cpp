@@ -8,6 +8,7 @@ namespace
         { "bMagicMenu", &Settings::Values::magicMenu },
         { "bBarterMenu", &Settings::Values::barterMenu },
         { "bContainerMenu", &Settings::Values::containerMenu },
+        { "bFollowerInventory", &Settings::Values::followerInventory },
         { "bHideItemPreviews", &Settings::Values::hideItemPreviews },
         { "bAnimateCharacter", &Settings::Values::animateCharacter },
         { "bAllowMovement", &Settings::Values::allowMovement },
@@ -37,7 +38,6 @@ namespace Settings
     void Load()
     {
         GetINI().Load(FIELDS, values);
-        logger::info("[Settings] enabled={} animateCharacter={}", values.enabled, values.animateCharacter);
     }
 
     // only what differs from the defaults is written
@@ -60,16 +60,32 @@ namespace Settings
             return values.barterMenu;
         }
 
-        // chests and other containers only. an actor's inventory is a body, a pickpocket or a follower, where showing the player isn't much use
+        // chests, bodies and other containers. a living actor's inventory is only watched when it's a follower's, so pickpocketing is left alone
         if (menuName == RE::ContainerMenu::MENU_NAME) {
-            if (!values.containerMenu) {
+            const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
+            if (!target) {
                 return false;
             }
 
-            const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
-            return target && !target->As<RE::Actor>();
+            const auto* actor = target->As<RE::Actor>();
+            if (actor && !actor->IsDead()) {
+                return values.followerInventory && GetFollower();
+            }
+            return values.containerMenu;
         }
 
         return false;
+    }
+
+    // the container menu's NPC mode is a follower's "let's trade", or a mod opening someone's inventory. bodies and pickpocketing have modes of their own
+    RE::Actor* GetFollower()
+    {
+        const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
+        auto* actor = target ? target->As<RE::Actor>() : nullptr;
+        if (!actor || actor->IsDead() || RE::ContainerMenu::GetContainerMode() != RE::ContainerMenu::ContainerMode::kNPCMode) {
+            return nullptr;
+        }
+
+        return actor;
     }
 }

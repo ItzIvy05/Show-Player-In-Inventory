@@ -8,8 +8,8 @@ namespace
 {
     using UEFlag = RE::ControlMap::UEFlag;
 
-    // pov switch and wheel zoom would move the game's own camera, and movement and looking keep the player still while time runs (skyrim souls).
-    // with allow movement, movement is left on. looking stays locked, as turning the player is right-drag's
+    // the controls locked while someone is shown. pov switch and wheel zoom would move the game's camera, and with skyrim souls, movement and
+    // looking would move the player. allow movement leaves movement on, but looking stays locked, as right-drag already turns the player
     constexpr std::array CONTROLS{ UEFlag::kPOVSwitch, UEFlag::kWheelZoom, UEFlag::kMovement, UEFlag::kLooking };
 
     // the body framed from the top of the screen nearly to the bottom, as -1 to 1 from the bottom up
@@ -29,7 +29,7 @@ namespace
     constexpr float FOV_MIN = 20.0f;
     constexpr float FOV_MAX = 120.0f;
 
-    // faster than this as the menu opens and the player counts as moving, so the view stays behind them. walking is around 80
+    // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
 
     // FUCK-RACE's prompt lock, plus quantity and book menus
@@ -198,9 +198,9 @@ namespace
         }
     }
 
-    void NeutralFace(RE::PlayerCharacter* player)
+    void NeutralFace(RE::Actor* actor)
     {
-        auto* face = player->GetFaceGenAnimationData();
+        auto* face = actor->GetFaceGenAnimationData();
         if (!face) {
             return;
         }
@@ -220,14 +220,14 @@ namespace
         face->eyesBlinkingTimer = 3.0f;
     }
 
-    void RestoreFace(RE::PlayerCharacter* player)
+    void RestoreFace(RE::Actor* actor)
     {
         if (!savedFace.saved) {
             return;
         }
         savedFace.saved = false;
 
-        auto* face = player->GetFaceGenAnimationData();
+        auto* face = actor->GetFaceGenAnimationData();
         if (!face) {
             return;
         }
@@ -342,14 +342,15 @@ namespace
         }
     };
 
-    // equipping in a paused menu skips telling the animation graph, so the player would keep the old weapon's idle until the menu closed.
-    // let through while the player is shown, as their animation is run here. thank you to Menu Studio for tracking this down
+    // the game doesn't tell the player's animation graph about an equip while paused, so the old weapon's idle would stay until the menu closed.
+    // it's let through while the player is shown, as their animation runs here. other actors are always told. found by Menu Studio
     struct EquipNotifyHook
     {
-        // the player's check for skipping the notice: false skips it, and it does while the game is paused. CommonLib declares it void
+        // the player's check before telling the graph, which is false while paused. CommonLib declares it void
         static bool CanNotify(RE::PlayerCharacter* a_this)
         {
-            return MenuCamera::GetSingleton()->IsActive() || _CanNotify(a_this);
+            auto* camera = MenuCamera::GetSingleton();
+            return (camera->IsActive() && camera->GetSubject() == a_this) || _CanNotify(a_this);
         }
 
         static void Install()
@@ -359,6 +360,97 @@ namespace
         }
 
         static inline REL::Relocation<decltype(CanNotify)> _CanNotify;
+    };
+
+    // an equip (or a mod reacting to an item going on) sends the animation graph an event. while someone is shown in a paused menu it plays here,
+    // then the game sends it again once the menu closes, so a repeat just after the menu is skipped. found by Inventory Reforged
+    namespace Replays
+    {
+        constexpr auto WINDOW = std::chrono::milliseconds(1500);  // how long after the menu closes a repeat is caught
+        constexpr std::size_t MOST = 32;
+
+        struct Event
+        {
+            const RE::IAnimationGraphManagerHolder* holder;
+            std::string name;
+        };
+
+        std::mutex lock;
+        std::vector<Event> heard;
+        std::chrono::steady_clock::time_point lastShown{};
+        std::atomic<const RE::IAnimationGraphManagerHolder*> shown = nullptr;
+
+        bool Notify(RE::IAnimationGraphManagerHolder* holder, const RE::BSFixedString& event, auto&& original)
+        {
+            const std::string_view name = event.c_str() ? event.c_str() : "";
+            const bool listening = shown == holder && RE::UI::GetSingleton()->GameIsPaused();
+
+            if (!name.empty() && !listening) {
+                std::scoped_lock guard{ lock };
+                const auto again = std::ranges::find_if(heard, [&](const Event& heardEvent) { return heardEvent.holder == holder && heardEvent.name == name; });
+                if (again != heard.end() && std::chrono::steady_clock::now() < lastShown + WINDOW) {
+                    heard.erase(again);
+                    return true;
+                }
+            }
+
+            const bool taken = original(holder, event);
+            if (taken && !name.empty() && listening) {
+                std::scoped_lock guard{ lock };
+                if (heard.size() < MOST) {
+                    heard.push_back({ holder, std::string(name) });
+                }
+            }
+            return taken;
+        }
+    }
+
+    // called each frame of the menu with whoever is shown while paused, or nullptr. a new showing starts with nothing heard
+    void HoldReplayedEvents(RE::Actor* subject)
+    {
+        const RE::IAnimationGraphManagerHolder* holder = subject;
+        std::scoped_lock guard{ Replays::lock };
+        if (holder && holder != Replays::shown) {
+            Replays::heard.clear();
+        }
+        if (holder) {
+            Replays::lastShown = std::chrono::steady_clock::now();
+        }
+        Replays::shown = holder;
+    }
+
+    // putting something on can send the actor "WeapOutRightReplaceForceEquip" (or the left-hand one), which draws their weapon. followers get it
+    // even for a helmet, so it's held back while whoever is shown has their weapon put away
+    bool DrawsPutAwayWeapon(const RE::IAnimationGraphManagerHolder* holder, const RE::BSFixedString& event)
+    {
+        const std::string_view name = event.c_str() ? event.c_str() : "";
+        if (name != "WeapOutRightReplaceForceEquip"sv && name != "WeapOutLeftReplaceForceEquip"sv) {
+            return false;
+        }
+
+        auto* camera = MenuCamera::GetSingleton();
+        auto* subject = camera->IsActive() ? camera->GetSubject() : nullptr;
+        return subject && static_cast<const RE::IAnimationGraphManagerHolder*>(subject) == holder && !subject->AsActorState()->IsWeaponDrawn();
+    }
+
+    template <class T>
+    struct AnimationEventHook
+    {
+        static bool Notify(RE::IAnimationGraphManagerHolder* a_this, const RE::BSFixedString& a_event)
+        {
+            if (DrawsPutAwayWeapon(a_this, a_event)) {
+                return true;
+            }
+            return Replays::Notify(a_this, a_event, _Notify);
+        }
+
+        static void Install()
+        {
+            REL::Relocation<std::uintptr_t> vtbl{ T::VTABLE[3] };
+            _Notify = vtbl.write_vfunc(0x1, Notify);
+        }
+
+        static inline REL::Relocation<decltype(Notify)> _Notify;
     };
 }
 
@@ -371,6 +463,8 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::BarterMenu>::Install();
     AdvanceMovieHook<RE::ContainerMenu>::Install();
     EquipNotifyHook::Install();
+    AnimationEventHook<RE::PlayerCharacter>::Install();
+    AnimationEventHook<RE::Character>::Install();
     ApplyItemPreviews();
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
@@ -405,6 +499,15 @@ bool MenuCamera::HasCamera()
     return active && FUCK::IsCameraSessionActive(this);
 }
 
+// the player, or the follower whose inventory is open
+RE::Actor* MenuCamera::GetSubject() const
+{
+    if (const auto shown = follower.get()) {
+        return shown.get();
+    }
+    return RE::PlayerCharacter::GetSingleton();
+}
+
 void MenuCamera::OnPerspectiveUpdate(bool firstPerson)
 {
     if (!active && !cacheFrozen) {
@@ -433,10 +536,16 @@ void MenuCamera::Start(std::string_view menuName)
     playerAngleZ = player->GetAngleZ();
     allowAutoVanityMode = camera->allowAutoVanityMode;
 
-    // the player faces the camera, so their head would turn round to look where it looks
-    headTrackingWasOn = player->AsActorState()->actorState2.headTracking;
-    HoldHeadStill(player);
-    NeutralFace(player);
+    // in a follower's inventory the follower is shown instead, through the player's camera
+    auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
+    follower = shownFollower ? shownFollower->GetHandle() : RE::ActorHandle{};
+    followerAngleZ = shownFollower ? shownFollower->GetAngleZ() : 0.0f;
+    auto* subject = shownFollower ? shownFollower : static_cast<RE::Actor*>(player);
+
+    // the one shown faces the camera, so their head would turn round to look where it looks
+    headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
+    HoldHeadStill(subject);
+    NeutralFace(subject);
 
     bool moving = false;
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
@@ -478,28 +587,37 @@ void MenuCamera::Start(std::string_view menuName)
     player->data.angle.x = 0.1f;
     player->Update3DPosition(true);
 
-    // either the player turns to face the camera, or the camera comes round to face them. on the move the view stays behind them.
-    // bartering or at a chest, the player faces the merchant or chest, so the camera would come round into it. they turn round instead
-    const bool facingTarget = menuName == RE::BarterMenu::MENU_NAME || menuName == RE::ContainerMenu::MENU_NAME;
-    const bool turnCharacter = Settings::values.turnCharacter || facingTarget;
-    if (!moving && !turnCharacter) {
+    // how the one shown ends up facing the camera:
+    // - looting, the player stays as they are (at the chest, crouched or kneeling), as turning them away from it looks wrong
+    // - a follower turns to face the camera
+    // - otherwise Turn Character decides whether they turn or the camera comes round to their front. on the move neither happens, so the
+    //   view stays behind them
+    const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
+    const bool turnCharacter = shownFollower != nullptr || (Settings::values.turnCharacter && !looting);
+    if (!moving && !looting && !turnCharacter) {
         MoveCameraToFront(player, camera);
     }
 
-    // FUCK's camera goes on last, once the camera above is ready.
-    // resumable, so another plugin's camera pauses this one rather than ending it
+    // FUCK's camera goes on last, once the camera above is ready. resumable, so another plugin's camera pauses it rather than ending it
     FUCK::CameraSessionOptions options;
     options.client = this;
     options.base = FUCK::CameraBase::kThirdPerson;
+    options.subject = shownFollower;
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
 
-    // otherwise it starts from the default framing every time. not on the move, as the view is then from behind and the remembered one is from the front
-    if (Settings::values.rememberCamera && !moving) {
+    // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
+    // remembered one is from the front, and not in containers, which frame the one shown as they stand
+    if (Settings::values.rememberCamera && !moving && menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
+    }
+
+    // an animation can kneel the player at a chest and stand them up again, so the framing follows while looting
+    if (looting) {
+        options.flags |= FUCK::CameraSessionFlags::kFollowPose;
     }
     options.startFramed = true;
     options.framingRect = GetFraming(GetListEdge());
@@ -514,8 +632,6 @@ void MenuCamera::Start(std::string_view menuName)
     if (!Settings::values.tutorialSeen) {
         SettingsUI::ShowControls();
     }
-
-    logger::info("[MenuCamera] Started.");
 }
 
 void MenuCamera::Stop()
@@ -530,6 +646,7 @@ void MenuCamera::Stop()
 
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
+    HoldReplayedEvents(nullptr);
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
@@ -543,18 +660,23 @@ void MenuCamera::Stop()
         camera->ForceFirstPerson();
     }
 
-    // FUCK turns the player by their heading to face the camera, so this puts them back to how they were facing
+    // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
+    auto* subject = GetSubject();
+    subject->AsActorState()->actorState2.headTracking = headTrackingWasOn;
+    RestoreFace(subject);
+    if (subject != player) {
+        subject->data.angle.z = followerAngleZ;
+        subject->Update3DPosition(true);
+    }
+    follower = {};
+
     player->data.angle.x = playerAngleX;
     player->data.angle.z = playerAngleZ;
-    player->AsActorState()->actorState2.headTracking = headTrackingWasOn;
-    RestoreFace(player);
 
     camera->allowAutoVanityMode = allowAutoVanityMode;
     camera->worldFOV = worldFOV;
     camera->Update();
     player->Update3DPosition(true);
-
-    logger::info("[MenuCamera] Stopped and restored camera state.");
 }
 
 void MenuCamera::Update(float interval)
@@ -563,21 +685,23 @@ void MenuCamera::Update(float interval)
         return;
     }
 
-    HoldHeadStill(RE::PlayerCharacter::GetSingleton());
+    auto* subject = GetSubject();
+    HoldHeadStill(subject);
 
     // FUCK-RACE's cap, so one long frame can't skip the idle ahead
     interval = std::min(interval, 0.1f);
 
-    // a paused world skips the player's animation and scene update, so it's done here. with skyrim souls the game runs it itself
-    if (!playerFrozen && RE::UI::GetSingleton()->GameIsPaused()) {
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        player->UpdateAnimation(interval);
+    // a paused world skips the animation and scene update of the one shown, so it's done here. with skyrim souls the game runs it itself
+    const bool paused = RE::UI::GetSingleton()->GameIsPaused();
+    if (!playerFrozen && paused) {
+        subject->UpdateAnimation(interval);
 
-        if (auto* root = player->Get3D()) {
+        if (auto* root = subject->Get3D(false)) {
             RE::NiUpdateData data{};
             root->Update(data);
         }
     }
+    HoldReplayedEvents(paused ? subject : nullptr);
 
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
@@ -608,8 +732,7 @@ bool MenuCamera::DrawPositionSliders()
     return true;
 }
 
-// freezes or thaws the player to match the setting, while a menu is open
-// movement is let through or locked as the setting changes, without waiting for the menu to open again
+// lets movement through or locks it as the setting changes, while a menu is open
 void MenuCamera::ApplyMovement()
 {
     if (!active) {
@@ -627,16 +750,17 @@ void MenuCamera::ApplyMovement()
     }
 }
 
+// freezes or thaws the one shown to match the setting, while a menu is open
 void MenuCamera::ApplyAnimation()
 {
     SetFrozen(active && !Settings::values.animateCharacter);
 }
 
-// FUCK holds the player still whether or not the game is paused (skyrim souls), and keeps their eyes open
+// FUCK holds the one shown still whether or not the game is paused (skyrim souls), eyes open
 void MenuCamera::SetFrozen(bool freeze)
 {
     if (freeze != playerFrozen) {
-        FUCK::SetActorFrozen(RE::PlayerCharacter::GetSingleton(), freeze);
+        FUCK::SetActorFrozen(GetSubject(), freeze);
         playerFrozen = freeze;
     }
 }

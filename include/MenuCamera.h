@@ -23,6 +23,9 @@ public:
     [[nodiscard]] bool IsActive() const;
     [[nodiscard]] bool HasCamera();
 
+    // the one shown: the player, or the follower whose inventory is open
+    [[nodiscard]] RE::Actor* GetSubject() const;
+
 private:
     // FUCK::ICameraClient
     void OnCameraUpdate(FUCK::CameraControlState& state, float interval) override;
@@ -34,6 +37,10 @@ private:
 
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
+
+    // a follower shown in the player's place, and how they faced, to put back
+    RE::ActorHandle follower;
+    float followerAngleZ = 0.0f;
     float worldFOV = 0.0f;
 
     bool active = false;

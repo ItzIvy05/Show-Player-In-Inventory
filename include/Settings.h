@@ -7,7 +7,8 @@ namespace Settings
         bool enabled = true;
         bool magicMenu = true;
         bool barterMenu = false;
-        bool containerMenu = false;
+        bool containerMenu = true;
+        bool followerInventory = true;
         bool hideItemPreviews = false;
         bool animateCharacter = true;
         bool allowMovement = false;
@@ -24,4 +25,7 @@ namespace Settings
     void Load();
     void Save();
     [[nodiscard]] bool IsWatchedMenu(std::string_view menuName);
+
+    // the follower whose inventory is open, shown in the player's place, or nullptr
+    [[nodiscard]] RE::Actor* GetFollower();
 }

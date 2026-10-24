@@ -241,6 +241,7 @@ namespace
         Checkbox("$SPII_MagicMenu"_T, values.magicMenu, "$SPII_MagicMenuTT"_T);
         Checkbox("$SPII_BarterMenu"_T, values.barterMenu, "$SPII_BarterMenuTT"_T);
         Checkbox("$SPII_ContainerMenu"_T, values.containerMenu, "$SPII_ContainerMenuTT"_T);
+        Checkbox("$SPII_FollowerInventory"_T, values.followerInventory, "$SPII_FollowerInventoryTT"_T);
 
         if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
             MenuCamera::ApplyItemPreviews();
