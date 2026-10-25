@@ -676,9 +676,14 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
-    // remembered one is from the front, nor in containers, riding, seated or lying down, as a remembered angle wouldn't suit the spot
+    // remembered one is from the front, nor in containers, on a horse, or seated, as a remembered angle wouldn't suit the spot
     if (Settings::values.rememberCamera && !moving && !mounted && !seated && menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
+
+        // and how they were turned, which wins over turning them to face the camera. not holding someone, who'd be seen catching up
+        if (Settings::values.rememberFacing && !holding) {
+            options.flags |= FUCK::CameraSessionFlags::kRememberFacing;
+        }
     }
 
     // an animation can kneel the player at a chest, or settle them into a seat or bed, so the framing follows

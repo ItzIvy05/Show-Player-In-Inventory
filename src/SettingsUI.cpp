@@ -284,6 +284,13 @@ namespace
 
             FUCK::TableNextColumn();
             Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
+
+            FUCK::Indent();
+            FUCK::BeginDisabled(!values.rememberCamera);
+            Checkbox("$SPII_RememberFacing"_T, values.rememberFacing, "$SPII_RememberFacingTT"_T);
+            FUCK::EndDisabled();
+            FUCK::Unindent();
+
             Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
             FUCK::EndTable();
         }
