@@ -62,8 +62,9 @@ namespace Settings
             return values.magicMenu;
         }
 
+        // always, from the front with Barter Menu on, otherwise from behind as when looting (MenuCamera::Start)
         if (menuName == RE::BarterMenu::MENU_NAME) {
-            return values.barterMenu;
+            return true;
         }
 
         // chests, bodies and other containers. a living actor's inventory is only watched when it's a follower's, so pickpocketing is left alone

@@ -658,14 +658,16 @@ void MenuCamera::Start(std::string_view menuName)
     // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
     //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
     //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
-    // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
+    // - looting, bartering with Barter Menu off, or on the move, it stays behind them, as turning them away from the chest or the merchant
+    //   looks wrong and the view should follow them
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
+    const bool fromBehind = looting || (menuName == RE::BarterMenu::MENU_NAME && !Settings::values.barterMenu);
     const bool seated = sitting || lying;
     const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
 
-    const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !looting && !seated));
-    const bool cameraToFront = !moving && !looting && (!turnCharacter || (talking && shownFollower));
+    const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool cameraToFront = !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
     // game's. otherwise the view carries on from the game's camera
@@ -706,8 +708,8 @@ void MenuCamera::Start(std::string_view menuName)
         options.flags |= FUCK::CameraSessionFlags::kFreshBase;
     }
 
-    // no turning at a chest, on a seat, in a bed, on a horse, or holding someone, where it would look wrong
-    if (looting || seated || riding || holding) {
+    // no turning from behind, on a seat, in a bed, on a horse, or holding someone, where it would look wrong
+    if (fromBehind || seated || riding || holding) {
         options.flags |= FUCK::CameraSessionFlags::kNoTurning;
     }
 
