@@ -251,24 +251,18 @@ namespace
         face->exprOverride = savedFace.exprOverride;
     }
 
-    // puts the third-person camera behind a horse on the move, a little above, looking down along the way it heads, so the framing starts
-    // from the same view however the camera was aimed or the ground sloped. FUCK's framing then sets how far back
-    void MoveCameraBehindMount(RE::Actor* mount, RE::Actor* rider, RE::PlayerCamera* camera)
+    // places the third-person camera looking at a point along the heading (from +y towards +x), tilted down by the pitch, this far back.
+    // FUCK's framing then sets the distance
+    void AimCamera(RE::PlayerCamera* camera, const RE::NiPoint3& at, float heading, float pitch, float back)
     {
-        constexpr float PITCH = 12.0f * RE::NI_PI / 180.0f;  // down from level
-        constexpr float BACK = 400.0f;                        // a starting distance, until framing sets it
-
         auto* root = camera->cameraRoot.get();
-        auto* model = rider->Get3D(false);
-        auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr;
-        if (!root || !head) {
+        if (!root) {
             return;
         }
 
-        // headings run from +y towards +x. each axis is a column: right, forward (the way the camera looks), then up the screen
-        const float heading = mount->GetAngleZ();
-        const float c = std::cos(PITCH);
-        const float s = std::sin(PITCH);
+        // each axis is a column: right, forward (the way the camera looks), then up the screen
+        const float c = std::cos(pitch);
+        const float s = std::sin(pitch);
         const RE::NiPoint3 along{ std::sin(heading), std::cos(heading), 0.0f };
         const RE::NiPoint3 right{ along.y, -along.x, 0.0f };
         const RE::NiPoint3 forward{ along.x * c, along.y * c, -s };
@@ -279,10 +273,31 @@ namespace
             rotate.entry[row][1] = forward[row];
             rotate.entry[row][2] = up[row];
         }
-        root->local.translate = head->world.translate - forward * BACK;
+        root->local.translate = at - forward * back;
 
         RE::NiUpdateData data{};
         root->Update(data);
+    }
+
+    // behind a horse on the move, a little above, looking down along the way it heads, so the framing starts from the same view however
+    // the camera was aimed or the ground sloped
+    void MoveCameraBehindMount(RE::Actor* mount, RE::Actor* rider, RE::PlayerCamera* camera)
+    {
+        auto* model = rider->Get3D(false);
+        if (auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr) {
+            AimCamera(camera, head->world.translate, mount->GetAngleZ(), 12.0f * RE::NI_PI / 180.0f, 400.0f);
+        }
+    }
+
+    // the game's own field of view, from its ini
+    float GetDefaultWorldFOV(float fallback)
+    {
+        for (auto* ini : { static_cast<RE::INISettingCollection*>(RE::INIPrefSettingCollection::GetSingleton()), RE::INISettingCollection::GetSingleton() }) {
+            if (auto* setting = ini ? ini->GetSetting("fDefaultWorldFOV:Display") : nullptr) {
+                return setting->GetFloat();
+            }
+        }
+        return fallback;
     }
 
     template <class T>
@@ -602,8 +617,6 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     worldFOV = camera->worldFOV;
-    player->data.angle.x = 0.1f;
-    player->Update3DPosition(true);
 
     // a rider's horse is animated with them in a paused menu
     const bool riding = subject->IsOnMount();
@@ -646,14 +659,34 @@ void MenuCamera::Start(std::string_view menuName)
     //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
     //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
     // - looting or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
+    // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
     const bool seated = sitting || lying;
+    const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
+
     const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !looting && !seated));
-    const bool cameraToFront = !moving && !looting && !turnCharacter;
+    const bool cameraToFront = !moving && !looting && (!turnCharacter || (talking && shownFollower));
+
+    // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
+    // game's. otherwise the view carries on from the game's camera
+    const bool freshBase = cameraToFront || talking;
+
+    // the player's look is levelled, so they don't hold their head looking up or down. not in a conversation, whose camera aims with it
+    pitchLevelled = !talking;
+    if (pitchLevelled) {
+        player->data.angle.x = 0.1f;
+        player->Update3DPosition(true);
+    }
 
     // on horseback on the move, the view behind starts from the same place each time, rather than wherever the camera was aimed
     if (moving && horse) {
         MoveCameraBehindMount(horse.get(), subject, camera);
+    }
+
+    // the game's field of view while they're shown, as a conversation camera can leave a narrow lens that frames them from far off.
+    // Stop puts it back
+    if (talking) {
+        camera->worldFOV = GetDefaultWorldFOV(camera->worldFOV);
     }
 
     // FUCK's camera goes on last, once the camera above is ready. resumable, so another plugin's camera pauses it rather than ending it
@@ -669,6 +702,9 @@ void MenuCamera::Start(std::string_view menuName)
     if (cameraToFront) {
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
+    if (freshBase) {
+        options.flags |= FUCK::CameraSessionFlags::kFreshBase;
+    }
 
     // no turning at a chest, on a seat, in a bed, on a horse, or holding someone, where it would look wrong
     if (looting || seated || riding || holding) {
@@ -676,8 +712,8 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
-    // remembered one is from the front, nor in containers, on a horse, or seated, as a remembered angle wouldn't suit the spot
-    if (Settings::values.rememberCamera && !moving && !mounted && !seated && menuName != RE::ContainerMenu::MENU_NAME) {
+    // remembered one is from the front, nor in containers, on a horse, seated, or in a conversation, as a remembered angle wouldn't suit the spot
+    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
 
         // and how they were turned, which wins over turning them to face the camera. not holding someone, who'd be seen catching up
@@ -752,7 +788,10 @@ void MenuCamera::Stop()
     }
     held.clear();
 
-    player->data.angle.x = playerAngleX;
+    // their look only if it was levelled, as a conversation camera aims with it
+    if (pitchLevelled) {
+        player->data.angle.x = playerAngleX;
+    }
     player->data.angle.z = playerAngleZ;
 
     camera->allowAutoVanityMode = allowAutoVanityMode;

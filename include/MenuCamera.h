@@ -39,6 +39,7 @@ private:
 
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
+    bool pitchLevelled = false;  // the player's look was levelled, to put back
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
