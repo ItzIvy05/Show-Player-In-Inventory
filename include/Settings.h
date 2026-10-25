@@ -21,6 +21,7 @@ namespace Settings
         bool rememberCamera    = false;
         bool rememberFacing    = false;
         bool hideObstructions  = true;
+        bool upperBody         = false;
         bool cameraControls    = true;
         bool tutorialSeen      = false;
     };

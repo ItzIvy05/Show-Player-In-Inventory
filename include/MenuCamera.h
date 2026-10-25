@@ -40,6 +40,7 @@ private:
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
     bool pitchLevelled = false;  // the player's look was levelled, to put back
+    bool upperBody = false;      // framed from the chest up
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
@@ -52,9 +53,14 @@ private:
     struct Held
     {
         RE::ActorHandle actor;
-        bool animated = true;  // false for an animal another mod poses itself
+        bool animated = true;                     // false for an animal another mod poses itself
+        RE::NiPointer<RE::NiAVObject> carriedBy;  // what they move with: a horse's saddle, or the pelvis of whoever holds them
+        RE::NiTransform offset;                   // where they are against it
     };
     std::vector<Held> held;
+
+    // who the player's talking to, animated with the one shown in a paused menu
+    RE::ActorHandle partner;
     float worldFOV = 0.0f;
 
     bool active = false;

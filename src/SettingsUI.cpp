@@ -281,6 +281,7 @@ namespace
             FUCK::TableNextColumn();
             Checkbox("$SPII_TurnCharacter"_T,    values.turnCharacter,    "$SPII_TurnCharacterTT"_T);
             Checkbox("$SPII_HideObstructions"_T, values.hideObstructions, "$SPII_HideObstructionsTT"_T);
+            Checkbox("$SPII_UpperBody"_T,        values.upperBody,        "$SPII_UpperBodyTT"_T);
 
             FUCK::TableNextColumn();
             Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);

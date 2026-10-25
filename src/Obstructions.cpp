@@ -125,7 +125,7 @@ namespace
         float feetZ = 0.0f;
     };
 
-    std::optional<Body> GetBody(RE::Actor* subject, const View& view)
+    std::optional<Body> GetBody(RE::Actor* subject, const View& view, bool upperBody)
     {
         auto* model = subject ? subject->Get3D(false) : nullptr;
         auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr;
@@ -141,30 +141,39 @@ namespace
             body.bones.push_back(bone->world.translate);
         }
 
-        // the sight lines go from above the head down to the knees, through the middle of the body and either side of it across the view
+        // the sight lines go from above the head down to the knees, or to the chest when framed from there, through the middle of the body
+        // and either side of it across the view
         const RE::NiPoint3 up{ 0.0f, 0.0f, 1.0f };
         const RE::NiPoint3 knees = pelvis->world.translate - up * ((pelvis->world.translate.z - body.feetZ) * 0.5f);
         const RE::NiPoint3 side = view.right * BODY_WIDTH;
-        for (const auto& point : { head->world.translate + up * 20.0f, head->world.translate, chest->world.translate, pelvis->world.translate, knees }) {
+        std::vector<RE::NiPoint3> points{ head->world.translate + up * 20.0f, head->world.translate, chest->world.translate };
+        if (!upperBody) {
+            points.push_back(pelvis->world.translate);
+            points.push_back(knees);
+        }
+        for (const auto& point : points) {
             body.targets.push_back(point);
             body.targets.push_back(point + side);
             body.targets.push_back(point - side);
         }
 
         // a rider's horse is shown too: its feet are the floor, and sight lines also go along its body, from the chest to the rump at the
-        // height of its legs and its back. headings run from +y towards +x. not a flying mount (a dragon), far too big to treat as the body
+        // height of its legs and its back, unless the framing leaves it out. headings run from +y towards +x. not a flying mount (a dragon),
+        // far too big to treat as the body
         RE::NiPointer<RE::Actor> mount;
         const auto* mountRace = subject->IsOnMount() && subject->GetMount(mount) && mount ? mount->GetRace() : nullptr;
         if (mountRace && mountRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
-            constexpr float HORSE_REACH = 90.0f;
             const RE::NiPoint3 base = mount->GetPosition();
-            const float heading = mount->GetAngleZ();
-            const RE::NiPoint3 along{ std::sin(heading), std::cos(heading), 0.0f };
             body.feetZ = base.z;
-            for (const float reach : { -HORSE_REACH, 0.0f, HORSE_REACH }) {
-                body.bones.push_back(base + along * reach + up * 110.0f);
-                for (const float height : { 60.0f, 130.0f }) {
-                    body.targets.push_back(base + along * reach + up * height);
+            if (!upperBody) {
+                constexpr float HORSE_REACH = 90.0f;
+                const float heading = mount->GetAngleZ();
+                const RE::NiPoint3 along{ std::sin(heading), std::cos(heading), 0.0f };
+                for (const float reach : { -HORSE_REACH, 0.0f, HORSE_REACH }) {
+                    body.bones.push_back(base + along * reach + up * 110.0f);
+                    for (const float height : { 60.0f, 130.0f }) {
+                        body.targets.push_back(base + along * reach + up * height);
+                    }
                 }
             }
         }
@@ -708,10 +717,10 @@ namespace
         }
     }
 
-    void Check(RE::Actor* subject, const std::vector<RE::Actor*>& shown, float elapsed)
+    void Check(RE::Actor* subject, const std::vector<RE::Actor*>& shown, bool upperBody, float elapsed)
     {
         const auto view = GetView();
-        const auto body = view ? GetBody(subject, *view) : std::nullopt;
+        const auto body = view ? GetBody(subject, *view, upperBody) : std::nullopt;
         if (!body) {
             return;
         }
@@ -842,7 +851,7 @@ namespace
 
 namespace Obstructions
 {
-    void Update(float interval, RE::Actor* subject, const std::vector<RE::Actor*>& shown)
+    void Update(float interval, RE::Actor* subject, const std::vector<RE::Actor*>& shown, bool upperBody)
     {
         if (!Settings::values.hideObstructions || !subject) {
             RestoreAll();
@@ -854,7 +863,7 @@ namespace Obstructions
             return;
         }
 
-        Check(subject, shown, sinceCheck);
+        Check(subject, shown, upperBody, sinceCheck);
         sinceCheck = 0.0f;
     }
 

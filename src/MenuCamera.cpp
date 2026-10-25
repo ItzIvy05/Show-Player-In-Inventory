@@ -39,6 +39,9 @@ namespace
     // an animal posed in your arms by another mod sits further out in front of you, so it's looked for this far away
     constexpr float POSED_REACH = 120.0f;
 
+    // the room round the body when they're holding someone, so whoever's riding behind or carried fits in too (FUCK's own is 1.15)
+    constexpr float HOLDING_MARGIN = 1.4f;
+
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
 
@@ -287,6 +290,17 @@ namespace
         if (auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr) {
             AimCamera(camera, head->world.translate, mount->GetAngleZ(), 12.0f * RE::NI_PI / 180.0f, 400.0f);
         }
+    }
+
+    // who the player's talking to, or nullptr
+    RE::Actor* GetConversationPartner()
+    {
+        auto* topics = RE::MenuTopicManager::GetSingleton();
+        auto ref = topics ? topics->speaker.get() : RE::NiPointer<RE::TESObjectREFR>{};
+        if (!ref && topics) {
+            ref = topics->lastSpeaker.get();
+        }
+        return ref ? ref->As<RE::Actor>() : nullptr;
     }
 
     // the game's own field of view, from its ini
@@ -551,9 +565,15 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // anyone the one shown is holding (carried, or riding behind them) is placed against them each frame by the mod doing the holding,
-    // which a paused menu skips, so they're animated here as well. they're found by their 3D, as Cat Carry parks a held animal's actor
-    // behind you while posing its 3D in your arms. that mod poses the animal and your arms round it itself, so neither is animated here
-    // (see IsAnimatedHere)
+    // which a paused menu skips, so they're animated here as well, and kept where they are against the saddle or the holder's pelvis, so
+    // they move with them. they're found by their 3D, as Cat Carry parks a held animal's actor behind you while posing its 3D in your
+    // arms. that mod poses the animal and your arms round it itself, so neither is animated or moved here (see IsAnimatedHere)
+    auto* horseModel = horse ? horse->Get3D(false) : nullptr;
+    auto* subjectModel = subject->Get3D(false);
+    RE::NiAVObject* carrier = horseModel ? horseModel->GetObjectByName("SaddleBone") : nullptr;
+    if (!carrier && subjectModel) {
+        carrier = subjectModel->GetObjectByName("NPC Pelvis [Pelv]");
+    }
     held.clear();
     if (auto* processes = RE::ProcessLists::GetSingleton()) {
         for (const auto& handle : processes->highActorHandles) {
@@ -571,7 +591,12 @@ void MenuCamera::Start(std::string_view menuName)
                 return std::hypot(at.x - to.x, at.y - to.y) < reach && std::abs(at.z - to.z) < HELD_HEIGHT;
             };
             if (closeTo(subject->GetPosition()) || (horse && closeTo(horse->GetPosition()))) {
-                held.push_back({ actor->GetHandle(), !posed });
+                Held one{ actor->GetHandle(), !posed };
+                if (!posed && carrier) {
+                    one.carriedBy = RE::NiPointer<RE::NiAVObject>(carrier);
+                    one.offset = carrier->world.Invert() * model->world;
+                }
+                held.push_back(std::move(one));
             }
         }
     }
@@ -589,6 +614,8 @@ void MenuCamera::Start(std::string_view menuName)
     const bool fromBehind = looting || (menuName == RE::BarterMenu::MENU_NAME && !Settings::values.barterMenu);
     const bool seated = sitting || lying;
     const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
+    auto* talkingTo = talking ? GetConversationPartner() : nullptr;
+    partner = talkingTo && talkingTo != subject ? talkingTo->GetHandle() : RE::ActorHandle{};
 
     const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
@@ -648,9 +675,21 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    // an animation can kneel the player at a chest, or settle them into a seat or bed, so the framing follows
-    if (looting || seated) {
+
+    // the obstruction hiding goes by the same part of the body. not on a dragon, whose framing already shows the rider with some of it
+    const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
+    upperBody = Settings::values.upperBody && !onDragon;
+    if (upperBody) {
+        options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
+    }
+
+    // an animation can kneel the player at a chest, or settle them into a seat or bed, so the framing follows. framed from the chest up,
+    // it follows drawing a weapon or crouching too, as idle sway doesn't change the upper body's measure
+    if (looting || seated || upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFollowPose;
+    }
+    if (holding) {
+        options.framingMargin = HOLDING_MARGIN;
     }
     options.startFramed = true;
     options.framingRect = GetFraming(GetListEdge());
@@ -712,6 +751,7 @@ void MenuCamera::Stop()
         }
     }
     held.clear();
+    partner = {};
 
     // their look only if it was levelled, as a conversation camera aims with it
     if (pitchLevelled) {
@@ -763,13 +803,35 @@ void MenuCamera::Update(float interval)
                 root->Update(data);
             }
         }
+
+        // anyone held moves with what carries them, now it's moved this frame
+        for (const auto& one : held) {
+            const auto actor = one.actor.get();
+            auto* root = actor ? actor->Get3D(false) : nullptr;
+            if (!root || !one.carriedBy) {
+                continue;
+            }
+            const RE::NiTransform at = one.carriedBy->world * one.offset;
+            root->local = root->parent ? root->parent->world.Invert() * at : at;
+            RE::NiUpdateData data{};
+            root->Update(data);
+        }
+
+        // and who they're talking to, as across a counter they're in view too
+        if (const auto other = partner.get(); other && std::ranges::find(shown, other.get()) == shown.end()) {
+            other->UpdateAnimation(interval);
+            if (auto* root = other->Get3D(false)) {
+                RE::NiUpdateData data{};
+                root->Update(data);
+            }
+        }
     }
 
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
     // once the camera is placed, so it's what this frame sees from
-    Obstructions::Update(interval, subject, shown);
+    Obstructions::Update(interval, subject, shown, upperBody);
 }
 
 // FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
