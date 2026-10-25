@@ -505,10 +505,10 @@ void MenuCamera::Start(std::string_view menuName)
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
         process->ClearActionHeadtrackTarget(true);
 
-        // zero the speed and play the game's own stop
+        // zero the speed and play the game's own stop, unless Allow Movement lets you carry on, as on horseback
         auto& speed = process->middleHigh->currentMovementSpeed;
         moving = speed > MOVING_SPEED;
-        if (speed > 0.0f) {
+        if (speed > 0.0f && !Settings::values.allowMovement) {
             speed = 0.0f;
             RE::PlayerControls::GetSingleton()->data.autoMove = false;
             if (player->AsActorState()->IsSprinting()) {
