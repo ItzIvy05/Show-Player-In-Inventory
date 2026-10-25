@@ -386,80 +386,6 @@ namespace
 
         static inline REL::Relocation<decltype(CanNotify)> _CanNotify;
     };
-
-    // an equip (or a mod reacting to an item going on) sends the animation graph an event. while someone is shown in a paused menu it plays here,
-    // then the game sends it again once the menu closes, so a repeat just after the menu is skipped. found by Inventory Reforged
-    namespace Replays
-    {
-        constexpr auto WINDOW = std::chrono::milliseconds(1500);  // how long after the menu closes a repeat is caught
-        constexpr std::size_t MOST = 32;
-
-        struct Event
-        {
-            const RE::IAnimationGraphManagerHolder* holder;
-            std::string name;
-        };
-
-        std::mutex lock;
-        std::vector<Event> heard;
-        std::chrono::steady_clock::time_point lastShown{};
-        std::atomic<const RE::IAnimationGraphManagerHolder*> shown = nullptr;
-
-        bool Notify(RE::IAnimationGraphManagerHolder* holder, const RE::BSFixedString& event, auto&& original)
-        {
-            const std::string_view name = event.c_str() ? event.c_str() : "";
-            const bool listening = shown == holder && RE::UI::GetSingleton()->GameIsPaused();
-
-            if (!name.empty() && !listening) {
-                std::scoped_lock guard{ lock };
-                const auto again = std::ranges::find_if(heard, [&](const Event& heardEvent) { return heardEvent.holder == holder && heardEvent.name == name; });
-                if (again != heard.end() && std::chrono::steady_clock::now() < lastShown + WINDOW) {
-                    heard.erase(again);
-                    return true;
-                }
-            }
-
-            const bool taken = original(holder, event);
-            if (taken && !name.empty() && listening) {
-                std::scoped_lock guard{ lock };
-                if (heard.size() < MOST) {
-                    heard.push_back({ holder, std::string(name) });
-                }
-            }
-            return taken;
-        }
-    }
-
-    // called each frame of the menu with whoever is shown while paused, or nullptr. a new showing starts with nothing heard
-    void HoldReplayedEvents(RE::Actor* subject)
-    {
-        const RE::IAnimationGraphManagerHolder* holder = subject;
-        std::scoped_lock guard{ Replays::lock };
-        if (holder && holder != Replays::shown) {
-            Replays::heard.clear();
-        }
-        if (holder) {
-            Replays::lastShown = std::chrono::steady_clock::now();
-        }
-        Replays::shown = holder;
-    }
-
-    template <class T>
-    struct AnimationEventHook
-    {
-        static bool Notify(RE::IAnimationGraphManagerHolder* a_this, const RE::BSFixedString& a_event)
-        {
-            return Replays::Notify(a_this, a_event, _Notify);
-        }
-
-        static void Install()
-        {
-            REL::Relocation<std::uintptr_t> vtbl{ T::VTABLE[3] };
-            _Notify = vtbl.write_vfunc(0x1, Notify);
-        }
-
-        static inline REL::Relocation<decltype(Notify)> _Notify;
-    };
 }
 
 void MenuCamera::InstallHooks()
@@ -471,8 +397,6 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::BarterMenu>::Install();
     AdvanceMovieHook<RE::ContainerMenu>::Install();
     EquipNotifyHook::Install();
-    AnimationEventHook<RE::PlayerCharacter>::Install();
-    AnimationEventHook<RE::Character>::Install();
     ApplyItemPreviews();
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
@@ -755,7 +679,6 @@ void MenuCamera::Stop()
 
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
-    HoldReplayedEvents(nullptr);
     Obstructions::RestoreAll();
 
     auto* player = RE::PlayerCharacter::GetSingleton();
@@ -841,7 +764,6 @@ void MenuCamera::Update(float interval)
             }
         }
     }
-    HoldReplayedEvents(paused ? subject : nullptr);
 
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
