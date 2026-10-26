@@ -53,9 +53,9 @@ private:
     // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them
     std::string shownMenu;
     bool previewShowsPlayer = false;
-    float previewOffFor = 0.0f;
-    bool restarting = false;
-    bool moreHUDHidden = false;  // moreHUD's item card hidden for it, to show again
+    float previewOffFor     = 0.0f;
+    bool restarting         = false;
+    bool moreHUDHidden      = false;  // moreHUD's item card hidden for it, to show again
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
