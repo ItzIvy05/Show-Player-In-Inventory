@@ -329,6 +329,37 @@ namespace
         return ref ? ref->As<RE::Actor>() : nullptr;
     }
 
+    bool HasApparelPreview()
+    {
+        static const bool installed = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
+        return installed;
+    }
+
+    // Apparel Preview puts a piece on the player without equipping it, so a slot showing armour they aren't wearing (nor their skin) is
+    // a preview. only with ApparelPreview.dll loaded
+    bool IsApparelPreviewing()
+    {
+        if (!HasApparelPreview()) {
+            return false;
+        }
+
+        auto* player = RE::PlayerCharacter::GetSingleton();
+        const auto& biped = player->GetBiped(false);
+        if (!biped) {
+            return false;
+        }
+        auto* skin = player->GetSkin();
+        constexpr std::uint32_t ARMOR_SLOTS = 32;
+        for (std::uint32_t i = 0; i < ARMOR_SLOTS; ++i) {
+            auto* item = biped->objects[i].item;
+            auto* armor = item ? item->As<RE::TESObjectARMO>() : nullptr;
+            if (armor && armor != skin && armor != player->GetWornArmor(static_cast<RE::BGSBipedObjectForm::BipedObjectSlot>(1u << i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // who the barter menu is with, if they're in view to show
     RE::Actor* GetMerchant()
     {
@@ -389,13 +420,15 @@ namespace
     };
 
     // thank you myztikrice, from Show Player in Menus
-    // replaces the item preview load, so the preview stays empty while the player is shown. installed only once the option is turned on
+    // replaces the item preview load, so the preview stays empty while the player is shown. installed only once the option is turned on,
+    // or with Apparel Preview, whose pieces are shown on the player
     struct LoadInventoryItemHook
     {
         static void LoadInventoryItem(RE::Inventory3DManager* a_this, RE::InventoryEntryData* a_entry)
         {
             auto* object = a_entry ? a_entry->GetObject() : nullptr;
-            if (!object || (Settings::values.hideItemPreviews && MenuCamera::GetSingleton()->IsActive())) {
+            auto* camera = MenuCamera::GetSingleton();
+            if (!object || (Settings::values.hideItemPreviews && camera->IsActive()) || camera->IsPreviewShowingPlayer()) {
                 a_this->UnloadInventoryItem();
                 return;
             }
@@ -449,6 +482,9 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::ContainerMenu>::Install();
     EquipNotifyHook::Install();
     ApplyItemPreviews();
+    if (HasApparelPreview()) {
+        LoadInventoryItemHook::Install();
+    }
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
 }
@@ -525,10 +561,11 @@ void MenuCamera::Start(std::string_view menuName)
 
     playerAngleX = player->GetAngleX();
     playerAngleZ = player->GetAngleZ();
+    shownMenu = menuName;
 
     // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant with Show Merchant
     auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
-    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && Settings::values.showMerchant ? GetMerchant() : nullptr;
+    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && Settings::values.showMerchant && !previewShowsPlayer ? GetMerchant() : nullptr;
     auto* shownOther = shownFollower ? shownFollower : shownMerchant;
     follower = shownOther ? shownOther->GetHandle() : RE::ActorHandle{};
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
@@ -725,8 +762,10 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
-    // remembered one is from the front, nor in containers, on a horse, seated, or in a conversation, as a remembered angle wouldn't suit the spot
-    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && !shownMerchant && menuName != RE::ContainerMenu::MENU_NAME) {
+    // remembered one is from the front, nor in containers, on a horse, seated, or in a conversation, as a remembered angle wouldn't suit the
+    // spot, nor for Apparel Preview, which frames the whole body
+    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && !shownMerchant && !previewShowsPlayer &&
+        menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
 
         // and how they were turned, which wins over turning them to face the camera. not holding someone, who'd be seen catching up
@@ -737,9 +776,10 @@ void MenuCamera::Start(std::string_view menuName)
 
 
     // the obstruction hiding goes by the same part of the body. not on a dragon, whose framing already shows the rider with some of it.
-    // a merchant always, as across a counter they're seen from the chest up
+    // a merchant always, as across a counter they're seen from the chest up, and never the player shown for Apparel Preview, so the
+    // piece is seen whole
     const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
-    upperBody = shownMerchant || (Settings::values.upperBody && !onDragon);
+    upperBody = shownMerchant || (Settings::values.upperBody && !onDragon && !previewShowsPlayer);
     if (upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
     }
@@ -790,8 +830,14 @@ void MenuCamera::Stop()
         disabledControls.reset();
     }
 
-    if (cachedFirstPerson) {
+    // not between the merchant and the player on a restart, which goes straight back to third person
+    if (cachedFirstPerson && !restarting) {
         camera->ForceFirstPerson();
+    }
+    if (!restarting) {
+        previewShowsPlayer = false;
+        previewOffFor = 0.0f;
+        moreHUDHidden = false;
     }
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
@@ -830,6 +876,10 @@ void MenuCamera::Stop()
 void MenuCamera::Update(float interval)
 {
     if (!active) {
+        return;
+    }
+
+    if (FollowApparelPreview(interval)) {
         return;
     }
 
@@ -964,6 +1014,96 @@ std::vector<RE::Actor*> MenuCamera::GetShown() const
         }
     }
     return shown;
+}
+
+// in barter with Show Merchant, the player is shown while Apparel Preview has a piece on them, to see it, and the merchant again once
+// nothing's been previewed for a moment, so passing over rows that can't be previewed doesn't swap back and forth. true if it restarted
+bool MenuCamera::FollowApparelPreview(float interval)
+{
+    constexpr float BACK_AFTER = 1.0f;  // seconds without a preview before the merchant's shown again
+
+    if (shownMenu != RE::BarterMenu::MENU_NAME || !Settings::values.showMerchant || (!merchantShown && !previewShowsPlayer)) {
+        return false;
+    }
+
+    const bool previewing = IsApparelPreviewing();
+    if (previewing && merchantShown) {
+        previewShowsPlayer = true;
+        previewOffFor = 0.0f;
+        Restart();
+        if (auto* models = RE::Inventory3DManager::GetSingleton()) {
+            models->UnloadInventoryItem();
+        }
+        HideItemCards(true);
+        return true;
+    }
+
+    previewOffFor = previewing ? 0.0f : previewOffFor + interval;
+    if (previewShowsPlayer && previewOffFor >= BACK_AFTER) {
+        previewShowsPlayer = false;
+        HideItemCards(false);
+        Restart();
+        return true;
+    }
+
+    // each frame, after the menu's own update, as the card fades itself back in as the selection changes
+    if (previewShowsPlayer) {
+        HideItemCards(true);
+    }
+    return false;
+}
+
+// the item cards out of the way of the piece being previewed. the menu's own fade is used, so the next row highlighted brings it back
+void MenuCamera::HideItemCards(bool hide)
+{
+    const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
+    if (!view) {
+        moreHUDHidden = false;
+        return;
+    }
+
+    RE::GFxValue card;
+    const bool found = (view->GetVariable(&card, "_root.Menu_mc.itemCard") && card.IsDisplayObject()) ||
+                       (view->GetVariable(&card, "_root.Menu_mc.ItemCard_mc") && card.IsDisplayObject());
+    if (found && hide) {
+        card.Invoke("FadeOutCard");
+        RE::GFxValue faded{ false };
+        view->SetVariable("_root.Menu_mc._bItemCardFadedIn", faded, RE::GFxMovie::SetVarType::kNormal);
+    }
+
+    RE::GFxValue moreHUD;
+    if (view->GetVariable(&moreHUD, "_root.AHZItemCardContainer") && moreHUD.IsDisplayObject()) {
+        RE::GFxValue::DisplayInfo info;
+        moreHUD.GetDisplayInfo(&info);
+        if (hide && info.GetVisible()) {
+            info.SetVisible(false);
+            moreHUD.SetDisplayInfo(info);
+            moreHUDHidden = true;
+        } else if (!hide && moreHUDHidden) {
+            info.SetVisible(true);
+            moreHUD.SetDisplayInfo(info);
+            moreHUDHidden = false;
+        }
+    }
+}
+
+// shows someone else in the same menu: everything goes back, then is set up again, staying in third person between. the first-person cache
+// holds still, as putting the camera back would otherwise record third person in it
+void MenuCamera::Restart()
+{
+    const std::string menuName = shownMenu;
+    const bool wasCacheFrozen = cacheFrozen;
+    cacheFrozen = true;
+    restarting = true;
+    Stop();
+    Start(menuName);
+    restarting = false;
+    cacheFrozen = wasCacheFrozen;
+
+    // if it can't start again (combat began), first person comes back as a close would
+    if (!active && cachedFirstPerson) {
+        RE::PlayerCamera::GetSingleton()->ForceFirstPerson();
+    }
 }
 
 // the player out of the way of a merchant shown, as their own 3D (not first person's). only if it was drawn, so it's only put back then

@@ -22,6 +22,7 @@ public:
     void SetCacheFrozen(bool frozen);
     [[nodiscard]] bool IsActive() const;
     [[nodiscard]] bool HasCamera();
+    [[nodiscard]] bool IsPreviewShowingPlayer() const { return previewShowsPlayer; }
 
     // the one shown: the player, or the follower whose inventory is open
     [[nodiscard]] RE::Actor* GetSubject() const;
@@ -32,6 +33,9 @@ private:
     void OnCameraTakenOver() override;
 
     void SetFrozen(bool freeze);
+    bool FollowApparelPreview(float interval);
+    void HideItemCards(bool hide);
+    void Restart();
     void HidePlayer();
     void ShowPlayer();
     [[nodiscard]] bool IsAnimatedHere(RE::Actor* actor) const;
@@ -45,6 +49,13 @@ private:
     bool upperBody     = false;  // framed from the chest up
     bool merchantShown = false;  // a merchant in barter, whose counter and face are left alone
     bool playerHidden  = false;  // the player hidden from in front of a merchant shown
+
+    // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them
+    std::string shownMenu;
+    bool previewShowsPlayer = false;
+    float previewOffFor = 0.0f;
+    bool restarting = false;
+    bool moreHUDHidden = false;  // moreHUD's item card hidden for it, to show again
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
