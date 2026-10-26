@@ -8,6 +8,7 @@ namespace Settings
         bool enabled           = true;
         bool magicMenu         = true;
         bool barterMenu        = false;
+        bool showMerchant      = true;
         bool containerMenu     = true;
         bool followerInventory = true;
         bool showInCombat      = false;

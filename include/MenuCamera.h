@@ -32,6 +32,8 @@ private:
     void OnCameraTakenOver() override;
 
     void SetFrozen(bool freeze);
+    void HidePlayer();
+    void ShowPlayer();
     [[nodiscard]] bool IsAnimatedHere(RE::Actor* actor) const;
     [[nodiscard]] std::vector<RE::Actor*> GetShown() const;
 
@@ -40,7 +42,9 @@ private:
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
     bool pitchLevelled = false;  // the player's look was levelled, to put back
-    bool upperBody = false;      // framed from the chest up
+    bool upperBody     = false;  // framed from the chest up
+    bool merchantShown = false;  // a merchant in barter, whose counter and face are left alone
+    bool playerHidden  = false;  // the player hidden from in front of a merchant shown
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;
@@ -63,12 +67,12 @@ private:
     RE::ActorHandle partner;
     float worldFOV = 0.0f;
 
-    bool active = false;
-    bool cachedFirstPerson = false;
-    bool cacheFrozen = false;
-    bool headTrackingWasOn = false;
+    bool active              = false;
+    bool cachedFirstPerson   = false;
+    bool cacheFrozen         = false;
+    bool headTrackingWasOn   = false;
     bool allowAutoVanityMode = false;
-    bool playerFrozen = false;
+    bool playerFrozen        = false;
 
     // the cursor was on the item list when the mouse buttons went down, so they belong to the list
     bool mouseOnList = false;

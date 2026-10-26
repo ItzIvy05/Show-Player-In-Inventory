@@ -303,6 +303,17 @@ namespace
         return ref ? ref->As<RE::Actor>() : nullptr;
     }
 
+    // who the barter menu is with, if they're in view to show
+    RE::Actor* GetMerchant()
+    {
+        const auto ref = RE::TESObjectREFR::LookupByHandle(RE::BarterMenu::GetTargetRefHandle());
+        auto* merchant = ref ? ref->As<RE::Actor>() : nullptr;
+        if (!merchant) {
+            merchant = GetConversationPartner();
+        }
+        return merchant && merchant->Get3D(false) ? merchant : nullptr;
+    }
+
     // the game's own field of view, from its ini
     float GetDefaultWorldFOV(float fallback)
     {
@@ -490,16 +501,25 @@ void MenuCamera::Start(std::string_view menuName)
     playerAngleZ = player->GetAngleZ();
     allowAutoVanityMode = camera->allowAutoVanityMode;
 
-    // in a follower's inventory the follower is shown instead, through the player's camera
+    // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant with Show Merchant
     auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
-    follower = shownFollower ? shownFollower->GetHandle() : RE::ActorHandle{};
-    followerAngleZ = shownFollower ? shownFollower->GetAngleZ() : 0.0f;
-    auto* subject = shownFollower ? shownFollower : static_cast<RE::Actor*>(player);
+    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && Settings::values.showMerchant ? GetMerchant() : nullptr;
+    auto* shownOther = shownFollower ? shownFollower : shownMerchant;
+    follower = shownOther ? shownOther->GetHandle() : RE::ActorHandle{};
+    followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
+    auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
-    // the one shown faces the camera, so their head would turn round to look where it looks
+    // the one shown faces the camera, so their head would turn round to look where it looks. a merchant's face is left to the game, as a
+    // line they're partway through would be put back after and stick
+    merchantShown = shownMerchant != nullptr;
+    if (merchantShown) {
+        HidePlayer();
+    }
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
     HoldHeadStill(subject);
-    NeutralFace(subject);
+    if (!merchantShown) {
+        NeutralFace(subject);
+    }
 
     bool moving = false;
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
@@ -575,7 +595,8 @@ void MenuCamera::Start(std::string_view menuName)
         carrier = subjectModel->GetObjectByName("NPC Pelvis [Pelv]");
     }
     held.clear();
-    if (auto* processes = RE::ProcessLists::GetSingleton()) {
+    auto* processes = shownMerchant ? nullptr : RE::ProcessLists::GetSingleton();  // not round a merchant, where it'd catch the player
+    if (processes) {
         for (const auto& handle : processes->highActorHandles) {
             const auto actor = handle.get();
             auto* model = actor ? actor->Get3D(false) : nullptr;
@@ -610,15 +631,16 @@ void MenuCamera::Start(std::string_view menuName)
     // - looting, bartering with Barter Menu off, or on the move, it stays behind them, as turning them away from the chest or the merchant
     //   looks wrong and the view should follow them
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
+    // - a merchant shown is seen from the player's side of the counter, where they already face, chest up and never turned
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
-    const bool fromBehind = looting || (menuName == RE::BarterMenu::MENU_NAME && !Settings::values.barterMenu);
+    const bool fromBehind = looting || (menuName == RE::BarterMenu::MENU_NAME && !Settings::values.barterMenu && !shownMerchant);
     const bool seated = sitting || lying;
     const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
     auto* talkingTo = talking ? GetConversationPartner() : nullptr;
     partner = talkingTo && talkingTo != subject ? talkingTo->GetHandle() : RE::ActorHandle{};
 
-    const bool turnCharacter = !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
-    const bool cameraToFront = !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
+    const bool turnCharacter = !shownMerchant && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool cameraToFront = shownMerchant || (!moving && !fromBehind && (!turnCharacter || (talking && shownFollower)));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
     // game's. otherwise the view carries on from the game's camera
@@ -646,7 +668,7 @@ void MenuCamera::Start(std::string_view menuName)
     FUCK::CameraSessionOptions options;
     options.client = this;
     options.base = FUCK::CameraBase::kThirdPerson;
-    options.subject = shownFollower;
+    options.subject = shownOther;
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
     if (!moving && turnCharacter) {
@@ -659,14 +681,14 @@ void MenuCamera::Start(std::string_view menuName)
         options.flags |= FUCK::CameraSessionFlags::kFreshBase;
     }
 
-    // no turning from behind, on a seat, in a bed, on a horse, or holding someone, where it would look wrong
-    if (fromBehind || seated || riding || holding) {
+    // no turning from behind, on a seat, in a bed, on a horse, holding someone, or a merchant, where it would look wrong
+    if (fromBehind || seated || riding || holding || shownMerchant) {
         options.flags |= FUCK::CameraSessionFlags::kNoTurning;
     }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
     // remembered one is from the front, nor in containers, on a horse, seated, or in a conversation, as a remembered angle wouldn't suit the spot
-    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && menuName != RE::ContainerMenu::MENU_NAME) {
+    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && !shownMerchant && menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
 
         // and how they were turned, which wins over turning them to face the camera. not holding someone, who'd be seen catching up
@@ -676,9 +698,10 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
 
-    // the obstruction hiding goes by the same part of the body. not on a dragon, whose framing already shows the rider with some of it
+    // the obstruction hiding goes by the same part of the body. not on a dragon, whose framing already shows the rider with some of it.
+    // a merchant always, as across a counter they're seen from the chest up
     const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
-    upperBody = Settings::values.upperBody && !onDragon;
+    upperBody = shownMerchant || (Settings::values.upperBody && !onDragon);
     if (upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
     }
@@ -719,6 +742,7 @@ void MenuCamera::Stop()
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
     Obstructions::RestoreAll();
+    ShowPlayer();
 
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
@@ -741,6 +765,7 @@ void MenuCamera::Stop()
         subject->Update3DPosition(true);
     }
     follower = {};
+    merchantShown = false;
 
     mount = {};
 
@@ -830,8 +855,13 @@ void MenuCamera::Update(float interval)
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
-    // once the camera is placed, so it's what this frame sees from
-    Obstructions::Update(interval, subject, shown, upperBody);
+    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view, though the
+    // player stays hidden there, in case anything shows them again
+    if (merchantShown) {
+        HidePlayer();
+    } else {
+        Obstructions::Update(interval, subject, shown, upperBody);
+    }
 }
 
 // FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
@@ -897,6 +927,27 @@ std::vector<RE::Actor*> MenuCamera::GetShown() const
         }
     }
     return shown;
+}
+
+// the player out of the way of a merchant shown, as their own 3D (not first person's). only if it was drawn, so it's only put back then
+void MenuCamera::HidePlayer()
+{
+    auto* model = RE::PlayerCharacter::GetSingleton()->Get3D(false);
+    if (model && !model->GetAppCulled()) {
+        model->SetAppCulled(true);
+        playerHidden = true;
+    }
+}
+
+void MenuCamera::ShowPlayer()
+{
+    if (!playerHidden) {
+        return;
+    }
+    playerHidden = false;
+    if (auto* model = RE::PlayerCharacter::GetSingleton()->Get3D(false)) {
+        model->SetAppCulled(false);
+    }
 }
 
 // whether this frame's animation is run here for someone shown: not for a held animal another mod poses itself, nor for the one holding

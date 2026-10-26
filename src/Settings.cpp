@@ -7,6 +7,7 @@ namespace
         { "bEnable",            &Settings::Values::enabled },
         { "bMagicMenu",         &Settings::Values::magicMenu },
         { "bBarterMenu",        &Settings::Values::barterMenu },
+        { "bShowMerchant",      &Settings::Values::showMerchant },
         { "bContainerMenu",     &Settings::Values::containerMenu },
         { "bFollowerInventory", &Settings::Values::followerInventory },
         { "bShowInCombat",      &Settings::Values::showInCombat },

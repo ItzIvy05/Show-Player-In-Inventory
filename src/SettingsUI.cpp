@@ -248,6 +248,9 @@ namespace
             FUCK::TableNextColumn();
             Checkbox("$SPII_MagicMenu"_T,         values.magicMenu,         "$SPII_MagicMenuTT"_T);
             Checkbox("$SPII_BarterMenu"_T,        values.barterMenu,        "$SPII_BarterMenuTT"_T);
+            FUCK::Indent();
+            Checkbox("$SPII_ShowMerchant"_T,      values.showMerchant,      "$SPII_ShowMerchantTT"_T);
+            FUCK::Unindent();
             Checkbox("$SPII_ContainerMenu"_T,     values.containerMenu,     "$SPII_ContainerMenuTT"_T);
             Checkbox("$SPII_FollowerInventory"_T, values.followerInventory, "$SPII_FollowerInventoryTT"_T);
             Checkbox("$SPII_ShowInCombat"_T,      values.showInCombat,      "$SPII_ShowInCombatTT"_T);
