@@ -233,6 +233,32 @@ namespace
         face->eyesBlinkingTimer = 3.0f;
     }
 
+    void Clear(RE::BSFaceGenKeyframeMultiple& keyframe)
+    {
+        if (keyframe.values && keyframe.count > 0) {
+            std::fill_n(keyframe.values, keyframe.count, 0.0f);
+            keyframe.isUpdated = true;
+        }
+    }
+
+    // someone else's face straight to neutral in a paused menu, dropping a line they're partway through, as one more frame of the game's
+    // face update runs as the menu opens and none after it. not put back after, as the line would stick. with skyrim souls they finish it
+    void SettleFace(RE::Actor* actor)
+    {
+        auto* face = actor->GetFaceGenAnimationData();
+        if (!face) {
+            return;
+        }
+
+        face->ClearExpressionOverride();
+        face->Reset(0.0f, true, true, false, false);
+        RE::BSSpinLockGuard guard{ face->lock };
+        for (auto* keyframe : { &face->expressionKeyFrame, &face->modifierKeyFrame, &face->phenomeKeyFrame, &face->expression3, &face->modifier1,
+                 &face->modifier3, &face->phoneme1, &face->phoneme3 }) {
+            Clear(*keyframe);
+        }
+    }
+
     void RestoreFace(RE::Actor* actor)
     {
         if (!savedFace.saved) {
@@ -509,16 +535,21 @@ void MenuCamera::Start(std::string_view menuName)
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
     auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
-    // the one shown faces the camera, so their head would turn round to look where it looks. a merchant's face is left to the game, as a
-    // line they're partway through would be put back after and stick
+    // the one shown faces the camera, so their head would turn round to look where it looks
     merchantShown = shownMerchant != nullptr;
     if (merchantShown) {
         HidePlayer();
     }
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
     HoldHeadStill(subject);
-    if (!merchantShown) {
+    // the player's face eases to neutral and goes back after. anyone else's is settled in a paused menu, along with anyone held or talked
+    // to below, and otherwise left to the game
+    const auto menu = RE::UI::GetSingleton()->GetMenu(menuName);
+    const bool pausing = menu && menu->PausesGame();
+    if (subject == player) {
         NeutralFace(subject);
+    } else if (pausing) {
+        SettleFace(subject);
     }
 
     bool moving = false;
@@ -638,6 +669,16 @@ void MenuCamera::Start(std::string_view menuName)
     const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
     auto* talkingTo = talking ? GetConversationPartner() : nullptr;
     partner = talkingTo && talkingTo != subject ? talkingTo->GetHandle() : RE::ActorHandle{};
+    if (pausing) {
+        for (const auto& one : held) {
+            if (const auto actor = one.actor.get(); actor && actor.get() != player) {
+                SettleFace(actor.get());
+            }
+        }
+        if (const auto other = partner.get(); other && other.get() != player) {
+            SettleFace(other.get());
+        }
+    }
 
     const bool turnCharacter = !shownMerchant && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = shownMerchant || (!moving && !fromBehind && (!turnCharacter || (talking && shownFollower)));
