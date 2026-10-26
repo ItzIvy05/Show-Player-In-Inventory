@@ -67,12 +67,11 @@ private:
     RE::ActorHandle partner;
     float worldFOV = 0.0f;
 
-    bool active              = false;
-    bool cachedFirstPerson   = false;
-    bool cacheFrozen         = false;
-    bool headTrackingWasOn   = false;
-    bool allowAutoVanityMode = false;
-    bool playerFrozen        = false;
+    bool active            = false;
+    bool cachedFirstPerson = false;
+    bool cacheFrozen       = false;
+    bool headTrackingWasOn = false;
+    bool playerFrozen      = false;
 
     // the cursor was on the item list when the mouse buttons went down, so they belong to the list
     bool mouseOnList = false;

@@ -525,7 +525,6 @@ void MenuCamera::Start(std::string_view menuName)
 
     playerAngleX = player->GetAngleX();
     playerAngleZ = player->GetAngleZ();
-    allowAutoVanityMode = camera->allowAutoVanityMode;
 
     // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant with Show Merchant
     auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
@@ -596,8 +595,6 @@ void MenuCamera::Start(std::string_view menuName)
     if (disabledControls) {
         controlMap->ToggleControls(disabledControls.get(), false, false);
     }
-
-    camera->allowAutoVanityMode = false;
 
     // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it
     if (camera->currentState->id < RE::CameraState::kThirdPerson) {
@@ -825,7 +822,6 @@ void MenuCamera::Stop()
     }
     player->data.angle.z = playerAngleZ;
 
-    camera->allowAutoVanityMode = allowAutoVanityMode;
     camera->worldFOV = worldFOV;
     camera->Update();
     player->Update3DPosition(true);
