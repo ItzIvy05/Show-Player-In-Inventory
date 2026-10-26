@@ -10,7 +10,7 @@ namespace
     // the menu's blur taken away, given back if the one shown goes while the menu stays open (the mod turned off)
     std::uint32_t blurCleared = 0;
 
-    // only while someone is shown, so a menu with the mod off, or skipped (in combat), keeps its blur
+    // only while someone is shown, so a menu with the mod off, or one it couldn't start in (mid sit-down, the free or furniture camera), keeps its blur
     void ClearVanillaMenuBlur()
     {
         if (!MenuCamera::GetSingleton()->IsActive()) {

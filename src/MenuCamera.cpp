@@ -9,9 +9,9 @@ namespace
 {
     using UEFlag = RE::ControlMap::UEFlag;
 
-    // the controls locked while someone is shown. pov switch and wheel zoom would move the game's camera, and with skyrim souls, movement and
-    // looking would move the player. allow movement leaves movement on, but looking stays locked, as right-drag already turns the player
-    constexpr std::array CONTROLS{ UEFlag::kPOVSwitch, UEFlag::kWheelZoom, UEFlag::kMovement, UEFlag::kLooking };
+    // the controls locked while someone is shown. pov switch and wheel zoom would move the game's camera, and with skyrim souls, looking would
+    // turn the player, which right-drag already does. movement stays on, so they can walk with skyrim souls
+    constexpr std::array CONTROLS{ UEFlag::kPOVSwitch, UEFlag::kWheelZoom, UEFlag::kLooking };
 
     // the body framed from the top of the screen nearly to the bottom, as -1 to 1 from the bottom up
     constexpr float FRAMING_TOP = 1.0f;
@@ -143,14 +143,6 @@ namespace
     {
         auto* ui = RE::UI::GetSingleton();
         return IsCursorOverList<RE::InventoryMenu>(ui) || IsCursorOverList<RE::MagicMenu>(ui) || IsCursorOverList<RE::BarterMenu>(ui) || IsCursorOverList<RE::ContainerMenu>(ui);
-    }
-
-    void PerformAction(RE::Actor* actor, RE::DEFAULT_OBJECT id)
-    {
-        std::unique_ptr<RE::TESActionData> data{ RE::TESActionData::Create() };
-        data->source = RE::NiPointer<RE::TESObjectREFR>(actor);
-        data->action = RE::BGSDefaultObjectManager::GetSingleton()->GetObject<RE::BGSAction>(id);
-        data->Process();
     }
 
     // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
@@ -543,16 +535,15 @@ void MenuCamera::Start(std::string_view menuName)
     auto* player = RE::PlayerCharacter::GetSingleton();
     auto* camera = RE::PlayerCamera::GetSingleton();
 
-    // combat, riding, sitting, and lying down only as their settings allow, and never while sitting down or getting up. a rider counts as
-    // sitting to the game, so riding is told apart from a seat, and lying down is told from the pose, as a bed can report either state
+    // not while sitting down or getting up, and lying down only with GoToBed. a rider counts as sitting to the game, so riding is told apart
+    // from a seat, and lying down is told from the pose, as a bed can report either state
     const auto sitSleep = player->AsActorState()->GetSitSleepState();
     const bool mounted = player->IsOnMount();
     const bool inFurniture = !mounted && (sitSleep == RE::SIT_SLEEP_STATE::kIsSitting || sitSleep == RE::SIT_SLEEP_STATE::kIsSleeping);
     const bool lying = inFurniture && FUCK::IsLyingDown(player);
     const bool sitting = inFurniture && !lying;
     const bool settled = sitSleep == RE::SIT_SLEEP_STATE::kNormal || sitSleep == RE::SIT_SLEEP_STATE::kIsSitting || sitSleep == RE::SIT_SLEEP_STATE::kIsSleeping;
-    const bool seatAllowed = settled && (!sitting || Settings::values.showSitting) && (!lying || (Settings::values.showSleeping && Settings::CanLieDown()));
-    const bool allowed = seatAllowed && (!mounted || Settings::values.showOnHorseback) && (!player->IsInCombat() || Settings::values.showInCombat);
+    const bool allowed = settled && (!lying || Settings::CanLieDown());
     // the furniture and free cameras aren't the player's own, so switching either to third person would break it
     const bool ownCamera = camera->IsInFreeCameraMode() || camera->currentState->id == RE::CameraState::kFurniture;
     if (!allowed || ownCamera) {
@@ -563,9 +554,9 @@ void MenuCamera::Start(std::string_view menuName)
     playerAngleZ = player->GetAngleZ();
     shownMenu = menuName;
 
-    // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant with Show Merchant
+    // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant
     auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
-    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && Settings::values.showMerchant && !previewShowsPlayer ? GetMerchant() : nullptr;
+    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && !previewShowsPlayer ? GetMerchant() : nullptr;
     auto* shownOther = shownFollower ? shownFollower : shownMerchant;
     follower = shownOther ? shownOther->GetHandle() : RE::ActorHandle{};
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
@@ -592,39 +583,23 @@ void MenuCamera::Start(std::string_view menuName)
     if (auto* process = player->GetActorRuntimeData().currentProcess) {
         process->ClearActionHeadtrackTarget(true);
 
-        // zero the speed and play the game's own stop, unless Allow Movement lets you carry on, as on horseback
-        auto& speed = process->middleHigh->currentMovementSpeed;
-        moving = speed > MOVING_SPEED;
-        if (speed > 0.0f && !Settings::values.allowMovement) {
-            speed = 0.0f;
-            RE::PlayerControls::GetSingleton()->data.autoMove = false;
-            if (player->AsActorState()->IsSprinting()) {
-                PerformAction(player, RE::DEFAULT_OBJECT::kActionSprintStop);
-            }
-            PerformAction(player, RE::DEFAULT_OBJECT::kActionMoveStop);
-        }
+        // they carry on moving, as with skyrim souls they can walk on through the menu, and a paused menu keeps their run going
+        moving = process->middleHigh->currentMovementSpeed > MOVING_SPEED;
     }
 
-    // the horse being ridden is stopped too, as it would otherwise carry on turning, unless Allow Movement lets you ride on. a flying mount
-    // (a dragon) is left alone: it flies itself and is always moving, so counting it would keep the view behind the rider every time
+    // a horse on the move counts too. a flying mount (a dragon) is left out: it flies itself and is always moving, so counting it would
+    // keep the view behind the rider every time
     RE::NiPointer<RE::Actor> ridden;
     const auto* riddenRace = mounted && player->GetMount(ridden) && ridden ? ridden->GetRace() : nullptr;
     if (riddenRace && riddenRace->data.flags.none(RE::RACE_DATA::Flag::kFlies)) {
         if (auto* process = ridden->GetActorRuntimeData().currentProcess; process && process->middleHigh) {
-            auto& speed = process->middleHigh->currentMovementSpeed;
-            moving = moving || speed > MOVING_SPEED;
-            if (!Settings::values.allowMovement) {
-                speed = 0.0f;
-            }
-        }
-        if (!Settings::values.allowMovement) {
-            PerformAction(ridden.get(), RE::DEFAULT_OBJECT::kActionMoveStop);
+            moving = moving || process->middleHigh->currentMovementSpeed > MOVING_SPEED;
         }
     }
 
     auto* controlMap = RE::ControlMap::GetSingleton();
     for (const auto flag : CONTROLS) {
-        if (controlMap->AreControlsEnabled(flag) && !(flag == UEFlag::kMovement && Settings::values.allowMovement)) {
+        if (controlMap->AreControlsEnabled(flag)) {
             disabledControls.set(flag);
         }
     }
@@ -693,12 +668,11 @@ void MenuCamera::Start(std::string_view menuName)
     // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
     //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
     //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
-    // - looting, bartering with Barter Menu off, or on the move, it stays behind them, as turning them away from the chest or the merchant
-    //   looks wrong and the view should follow them
+    // - looting, or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
     // - a merchant shown is seen from the player's side of the counter, where they already face, chest up and never turned
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
-    const bool fromBehind = looting || (menuName == RE::BarterMenu::MENU_NAME && !Settings::values.barterMenu && !shownMerchant);
+    const bool fromBehind = looting;
     const bool seated = sitting || lying;
     const bool talking = RE::UI::GetSingleton()->IsMenuOpen(RE::DialogueMenu::MENU_NAME);
     auto* talkingTo = talking ? GetConversationPartner() : nullptr;
@@ -976,24 +950,6 @@ bool MenuCamera::DrawPositionSliders()
     return true;
 }
 
-// lets movement through or locks it as the setting changes, while a menu is open
-void MenuCamera::ApplyMovement()
-{
-    if (!active) {
-        return;
-    }
-
-    auto* controlMap = RE::ControlMap::GetSingleton();
-    const bool locked = disabledControls.any(UEFlag::kMovement);
-    if (Settings::values.allowMovement && locked) {
-        controlMap->ToggleControls(UEFlag::kMovement, true, false);
-        disabledControls.reset(UEFlag::kMovement);
-    } else if (!Settings::values.allowMovement && !locked && controlMap->AreControlsEnabled(UEFlag::kMovement)) {
-        controlMap->ToggleControls(UEFlag::kMovement, false, false);
-        disabledControls.set(UEFlag::kMovement);
-    }
-}
-
 // freezes or thaws the one shown to match the setting, while a menu is open
 void MenuCamera::ApplyAnimation()
 {
@@ -1016,13 +972,13 @@ std::vector<RE::Actor*> MenuCamera::GetShown() const
     return shown;
 }
 
-// in barter with Show Merchant, the player is shown while Apparel Preview has a piece on them, to see it, and the merchant again once
+// in barter, the player is shown in the merchant's place while Apparel Preview has a piece on them, to see it, and the merchant again once
 // nothing's been previewed for a moment, so passing over rows that can't be previewed doesn't swap back and forth. true if it restarted
 bool MenuCamera::FollowApparelPreview(float interval)
 {
     constexpr float BACK_AFTER = 1.0f;  // seconds without a preview before the merchant's shown again
 
-    if (shownMenu != RE::BarterMenu::MENU_NAME || !Settings::values.showMerchant || (!merchantShown && !previewShowsPlayer)) {
+    if (shownMenu != RE::BarterMenu::MENU_NAME || (!merchantShown && !previewShowsPlayer)) {
         return false;
     }
 

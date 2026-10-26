@@ -188,7 +188,6 @@ namespace
         {
             auto flags = FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kAutoResize | FUCK::WindowFlags::kNoResize | FUCK::WindowFlags::kCloseOnEsc;
 
-            // FUCK-RACE's hover check, input only goes to the box while the cursor is on it
             const ImVec2 mouse = FUCK::GetMousePos();
             const bool hovered = mouse.x >= lastPos.x && mouse.x <= lastPos.x + lastSize.x && mouse.y >= lastPos.y && mouse.y <= lastPos.y + lastSize.y;
             if (!hovered && !FUCK::IsAnyItemActive()) {
@@ -233,60 +232,50 @@ namespace
         }
     };
 
+    void BeginSection(const char* title)
+    {
+        FUCK::SeparatorText(title);
+        FUCK::Indent();
+    }
+
+    void EndSection()
+    {
+        FUCK::Unindent();
+    }
+
     void DrawSettings()
     {
         auto& values = Settings::values;
 
-        if (Checkbox("$SPII_Enable"_T, values.enabled, "$SPII_EnableTT"_T)) {
+        const ImVec4 ON{ 0.2f, 0.8f, 0.2f, 1.0f };   // green
+        const ImVec4 OFF{ 0.8f, 0.2f, 0.2f, 1.0f };  // red
+        FUCK::PushStyleColor(ImGuiCol_Text, values.enabled ? ON : OFF);
+        const bool toggled = FUCK::Checkbox("$SPII_Enable"_T, &values.enabled, false);
+        FUCK::PopStyleColor();
+        FUCK::SetTooltip("$SPII_EnableTT"_T);
+        if (toggled) {
+            Settings::Save();
             EventProcessor::GetSingleton()->ApplyLiveSettings();
         }
 
         FUCK::Spacing();
-        FUCK::SeparatorText("$SPII_General"_T);
 
-        if (BeginCheckboxes("##General")) {
+        if (BeginCheckboxes("##Settings")) {
             FUCK::TableNextColumn();
-            Checkbox("$SPII_MagicMenu"_T,         values.magicMenu,         "$SPII_MagicMenuTT"_T);
-            Checkbox("$SPII_BarterMenu"_T,        values.barterMenu,        "$SPII_BarterMenuTT"_T);
-            FUCK::Indent();
-            Checkbox("$SPII_ShowMerchant"_T,      values.showMerchant,      "$SPII_ShowMerchantTT"_T);
-            FUCK::Unindent();
-            Checkbox("$SPII_ContainerMenu"_T,     values.containerMenu,     "$SPII_ContainerMenuTT"_T);
-            Checkbox("$SPII_FollowerInventory"_T, values.followerInventory, "$SPII_FollowerInventoryTT"_T);
-            Checkbox("$SPII_ShowInCombat"_T,      values.showInCombat,      "$SPII_ShowInCombatTT"_T);
-            Checkbox("$SPII_ShowOnHorseback"_T,   values.showOnHorseback,   "$SPII_ShowOnHorsebackTT"_T);
-            Checkbox("$SPII_ShowSitting"_T,       values.showSitting,       "$SPII_ShowSittingTT"_T);
-            
-            if (Settings::CanLieDown()) {
-                Checkbox("$SPII_ShowSleeping"_T, values.showSleeping, "$SPII_ShowSleepingTT"_T);
-            }
-
-            FUCK::TableNextColumn();
-            if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
-                MenuCamera::ApplyItemPreviews();
-            }
-
+            BeginSection("$SPII_General"_T);
             if (Checkbox("$SPII_Animate"_T, values.animateCharacter, "$SPII_AnimateTT"_T)) {
                 MenuCamera::GetSingleton()->ApplyAnimation();
             }
-
-            if (Checkbox("$SPII_AllowMovement"_T, values.allowMovement, "$SPII_AllowMovementTT"_T)) {
-                MenuCamera::GetSingleton()->ApplyMovement();
+            if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
+                MenuCamera::ApplyItemPreviews();
             }
-
-            FUCK::EndTable();
-        }
-
-        FUCK::Spacing();
-        FUCK::SeparatorText("$SPII_Camera"_T);
-
-        if (BeginCheckboxes("##Camera")) {
-            FUCK::TableNextColumn();
-            Checkbox("$SPII_TurnCharacter"_T,    values.turnCharacter,    "$SPII_TurnCharacterTT"_T);
             Checkbox("$SPII_HideObstructions"_T, values.hideObstructions, "$SPII_HideObstructionsTT"_T);
-            Checkbox("$SPII_UpperBody"_T,        values.upperBody,        "$SPII_UpperBodyTT"_T);
+            EndSection();
 
             FUCK::TableNextColumn();
+            BeginSection("$SPII_Camera"_T);
+            Checkbox("$SPII_TurnCharacter"_T, values.turnCharacter, "$SPII_TurnCharacterTT"_T);
+            Checkbox("$SPII_UpperBody"_T, values.upperBody, "$SPII_UpperBodyTT"_T);
             Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
 
             FUCK::Indent();
@@ -294,25 +283,44 @@ namespace
             Checkbox("$SPII_RememberFacing"_T, values.rememberFacing, "$SPII_RememberFacingTT"_T);
             FUCK::EndDisabled();
             FUCK::Unindent();
+            EndSection();
 
-            Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
             FUCK::EndTable();
         }
 
+        FUCK::Spacing();
+
         auto* camera = MenuCamera::GetSingleton();
-        if (FUCK::BeginTable("##CameraMore", 2, FUCK::TableFlags::kSizingStretchSame)) {
+        if (BeginCheckboxes("##Controls")) {
             FUCK::TableNextColumn();
-            if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
-                FUCK::TextDisabled("%s", "$SPII_SlidersClosed"_T);
+            BeginSection("$SPII_Controls"_T);
+            Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
+            if (FUCK::Button("$SPII_ShowControls"_T)) {
+                SettingsUI::ShowControls();
             }
+            FUCK::SetTooltip("$SPII_ShowControlsTT"_T);
+            if (values.cameraControls) {
+                FUCK::SameLine();
+                FUCK::DrawCameraHelpMarker(HELP_FLAGS);
+            }
+            EndSection();
 
             FUCK::TableNextColumn();
+            BeginSection("$SPII_Adjust"_T);
+            if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
+                FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+            }
             if (FUCK::CollapsingHeader("$SPII_Advanced"_T)) {
                 FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
             }
+            EndSection();
 
             FUCK::EndTable();
         }
+
+        FUCK::Spacing();
+        FUCK::Separator();
+        FUCK::Spacing();
 
         FUCK::BeginDisabled(!camera->HasCamera());
         if (FUCK::Button("$SPII_ResetCamera"_T)) {
@@ -321,26 +329,12 @@ namespace
         FUCK::EndDisabled();
         FUCK::SetTooltip("$SPII_ResetCameraTT"_T);
 
-        FUCK::Spacing();
-        FUCK::SeparatorText("$SPII_Controls"_T);
-
-        if (FUCK::Button("$SPII_ShowControls"_T)) {
-            SettingsUI::ShowControls();
-        }
-        FUCK::SetTooltip("$SPII_ShowControlsTT"_T);
-        if (values.cameraControls) {
-            FUCK::SameLine();
-            FUCK::DrawCameraHelpMarker(HELP_FLAGS);
-        }
-
-        FUCK::Spacing();
-
+        FUCK::SameLine();
         if (FUCK::Button("$SPII_ResetDefaults"_T)) {
             Settings::SetDefaults();
             Settings::Save();
             EventProcessor::GetSingleton()->ApplyLiveSettings();
             MenuCamera::GetSingleton()->ApplyAnimation();
-            MenuCamera::GetSingleton()->ApplyMovement();
         }
         FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
     }
