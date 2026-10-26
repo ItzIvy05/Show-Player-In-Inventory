@@ -66,7 +66,8 @@ namespace Settings
             return true;
         }
 
-        // chests, bodies and other containers. a living actor's inventory is only watched when it's a follower's, so pickpocketing is left alone
+        // chests, bodies and other containers, and a living actor's inventory when it's a follower's or being pickpocketed. anyone else's (a
+        // mod opening it) is left alone
         if (menuName == RE::ContainerMenu::MENU_NAME) {
             const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
             if (!target) {
@@ -74,7 +75,7 @@ namespace Settings
             }
 
             const auto* actor = target->As<RE::Actor>();
-            return !actor || actor->IsDead() || GetFollower();
+            return !actor || actor->IsDead() || GetFollower() || GetPickpocketed();
         }
 
         return false;
@@ -86,15 +87,26 @@ namespace Settings
         return installed;
     }
 
-    // the container menu's NPC mode is a follower's "let's trade", or a mod opening someone's inventory. bodies and pickpocketing have modes of their own
-    RE::Actor* GetFollower()
+    // the living actor whose inventory the container menu has open in this mode, or nullptr
+    RE::Actor* GetContainerActor(RE::ContainerMenu::ContainerMode mode)
     {
         const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
         auto* actor = target ? target->As<RE::Actor>() : nullptr;
-        if (!actor || actor->IsDead() || RE::ContainerMenu::GetContainerMode() != RE::ContainerMenu::ContainerMode::kNPCMode) {
+        if (!actor || actor->IsDead() || RE::ContainerMenu::GetContainerMode() != mode) {
             return nullptr;
         }
 
         return actor;
+    }
+
+    // the container menu's NPC mode is a follower's "let's trade", or a mod opening someone's inventory. bodies and pickpocketing have modes of their own
+    RE::Actor* GetFollower()
+    {
+        return GetContainerActor(RE::ContainerMenu::ContainerMode::kNPCMode);
+    }
+
+    RE::Actor* GetPickpocketed()
+    {
+        return GetContainerActor(RE::ContainerMenu::ContainerMode::kPickpocket);
     }
 }

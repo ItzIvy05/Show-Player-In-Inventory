@@ -554,17 +554,22 @@ void MenuCamera::Start(std::string_view menuName)
     playerAngleZ = player->GetAngleZ();
     shownMenu = menuName;
 
-    // in a follower's inventory the follower is shown instead, through the player's camera, and in barter the merchant
-    auto* shownFollower = menuName == RE::ContainerMenu::MENU_NAME ? Settings::GetFollower() : nullptr;
+    // in a follower's inventory the follower is shown instead, through the player's camera, in barter the merchant, and pickpocketing,
+    // whoever's being robbed
+    const bool container = menuName == RE::ContainerMenu::MENU_NAME;
+    auto* shownFollower = container ? Settings::GetFollower() : nullptr;
     auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && !previewShowsPlayer ? GetMerchant() : nullptr;
-    auto* shownOther = shownFollower ? shownFollower : shownMerchant;
+    auto* shownVictim = container ? Settings::GetPickpocketed() : nullptr;
+    auto* shownOther = shownFollower ? shownFollower : shownMerchant ? shownMerchant : shownVictim;
     follower = shownOther ? shownOther->GetHandle() : RE::ActorHandle{};
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
     auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
     // the one shown faces the camera, so their head would turn round to look where it looks
+    // the player out of the way of a merchant or whoever's being robbed, as they stand right in front
     merchantShown = shownMerchant != nullptr;
-    if (merchantShown) {
+    hidingPlayer = merchantShown || shownVictim;
+    if (hidingPlayer) {
         HidePlayer();
     }
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
@@ -635,7 +640,7 @@ void MenuCamera::Start(std::string_view menuName)
         carrier = subjectModel->GetObjectByName("NPC Pelvis [Pelv]");
     }
     held.clear();
-    auto* processes = shownMerchant ? nullptr : RE::ProcessLists::GetSingleton();  // not round a merchant, where it'd catch the player
+    auto* processes = hidingPlayer ? nullptr : RE::ProcessLists::GetSingleton();  // not round a merchant or victim, where it'd catch the player
     if (processes) {
         for (const auto& handle : processes->highActorHandles) {
             const auto actor = handle.get();
@@ -668,7 +673,8 @@ void MenuCamera::Start(std::string_view menuName)
     // - it comes round to their front instead (looking down along them, lying down): with Turn Character off, and always when sitting,
     //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
     //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
-    // - looting, or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them
+    // - looting, or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them.
+    //   pickpocketing too, so whoever's robbed is seen as the player sees them, and never turned
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
     // - a merchant shown is seen from the player's side of the counter, where they already face, chest up and never turned
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
@@ -824,6 +830,7 @@ void MenuCamera::Stop()
     }
     follower = {};
     merchantShown = false;
+    hidingPlayer = false;
 
     mount = {};
 
@@ -916,12 +923,13 @@ void MenuCamera::Update(float interval)
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
-    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view, though the
-    // player stays hidden there, in case anything shows them again
-    if (merchantShown) {
-        HidePlayer();
-    } else {
+    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view. a hidden
+    // player is hidden again after, in case anything shows them
+    if (!merchantShown) {
         Obstructions::Update(interval, subject, shown, upperBody);
+    }
+    if (hidingPlayer) {
+        HidePlayer();
     }
 }
 
@@ -1062,7 +1070,8 @@ void MenuCamera::Restart()
     }
 }
 
-// the player out of the way of a merchant shown, as their own 3D (not first person's). only if it was drawn, so it's only put back then
+// the player out of the way of whoever's shown in front of them, as their own 3D (not first person's). only if it was drawn, so it's only
+// put back then
 void MenuCamera::HidePlayer()
 {
     auto* model = RE::PlayerCharacter::GetSingleton()->Get3D(false);

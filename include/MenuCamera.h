@@ -47,7 +47,8 @@ private:
     bool pitchLevelled = false;  // the player's look was levelled, to put back
     bool upperBody     = false;  // framed from the chest up
     bool merchantShown = false;  // a merchant in barter, whose counter and face are left alone
-    bool playerHidden  = false;  // the player hidden from in front of a merchant shown
+    bool hidingPlayer  = false;  // the player's kept hidden, from in front of a merchant or whoever's pickpocketed
+    bool playerHidden  = false;  // and was drawn when hidden, so is shown again
 
     // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them
     std::string shownMenu;
