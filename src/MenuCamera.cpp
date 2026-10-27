@@ -352,6 +352,73 @@ namespace
         return false;
     }
 
+    constexpr const char* SHADE_PATH = "_root.SPII_Shade";
+
+    // dark edges round the menu, clear in the middle, under everything the menu draws
+    void CreateShade(RE::GFxMovieView* view)
+    {
+        RE::GFxValue root;
+        if (!view->GetVariable(&root, "_root") || !root.IsDisplayObject()) {
+            return;
+        }
+
+        RE::GFxValue shade;
+        const std::array<RE::GFxValue, 2> args{ RE::GFxValue("SPII_Shade"), RE::GFxValue(-16384.0) };
+        if (!root.Invoke("createEmptyMovieClip", &shade, args) || !shade.IsDisplayObject()) {
+            return;
+        }
+
+        const auto   frame  = view->GetVisibleFrameRect();
+        const double width  = frame.right - frame.left;
+        const double height = frame.bottom - frame.top;
+
+        RE::GFxValue colors;
+        RE::GFxValue alphas;
+        RE::GFxValue ratios;
+        view->CreateArray(&colors);
+        view->CreateArray(&alphas);
+        view->CreateArray(&ratios);
+        for (const auto [alpha, ratio] : { std::pair{ 0.0, 110.0 }, std::pair{ 85.0, 255.0 } }) {
+            colors.PushBack(RE::GFxValue(0.0));
+            alphas.PushBack(RE::GFxValue(alpha));
+            ratios.PushBack(RE::GFxValue(ratio));
+        }
+
+        RE::GFxValue box;
+        view->CreateObject(&box);
+        box.SetMember("matrixType", RE::GFxValue("box"));
+        box.SetMember("x", RE::GFxValue(static_cast<double>(frame.left)));
+        box.SetMember("y", RE::GFxValue(static_cast<double>(frame.top)));
+        box.SetMember("w", RE::GFxValue(width));
+        box.SetMember("h", RE::GFxValue(height));
+        box.SetMember("r", RE::GFxValue(0.0));
+
+        shade.Invoke("beginGradientFill", std::array<RE::GFxValue, 5>{ RE::GFxValue("radial"), colors, alphas, ratios, box });
+        shade.Invoke("moveTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(static_cast<double>(frame.left)),  RE::GFxValue(static_cast<double>(frame.top)) });
+        shade.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(static_cast<double>(frame.right)), RE::GFxValue(static_cast<double>(frame.top)) });
+        shade.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(static_cast<double>(frame.right)), RE::GFxValue(static_cast<double>(frame.bottom)) });
+        shade.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(static_cast<double>(frame.left)),  RE::GFxValue(static_cast<double>(frame.bottom)) });
+        shade.Invoke("lineTo", std::array<RE::GFxValue, 2>{ RE::GFxValue(static_cast<double>(frame.left)),  RE::GFxValue(static_cast<double>(frame.top)) });
+        shade.Invoke("endFill");
+    }
+
+    // nobody near has noticed the player, by the game's own detection (what papyrus IsDetectedBy reads). followers don't count, as they
+    // always know where the player is
+    bool IsUnseen(RE::PlayerCharacter* player)
+    {
+        auto* processes = RE::ProcessLists::GetSingleton();
+        if (!processes) {
+            return true;
+        }
+        for (const auto& handle : processes->highActorHandles) {
+            const auto actor = handle.get();
+            if (actor && !actor->IsDead() && !actor->IsPlayerTeammate() && actor->RequestDetectionLevel(player) > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // who the barter menu is with, if they're in view to show
     RE::Actor* GetMerchant()
     {
@@ -558,6 +625,7 @@ void MenuCamera::Start(std::string_view menuName)
     // whoever's being robbed
     const bool container = menuName == RE::ContainerMenu::MENU_NAME;
     auto* shownFollower = container ? Settings::GetFollower() : nullptr;
+    shadeAllowed = menuName != RE::BarterMenu::MENU_NAME && !shownFollower;
     auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && !previewShowsPlayer ? GetMerchant() : nullptr;
     auto* shownVictim = container ? Settings::GetPickpocketed() : nullptr;
     auto* shownOther = shownFollower ? shownFollower : shownMerchant ? shownMerchant : shownVictim;
@@ -800,6 +868,7 @@ void MenuCamera::Stop()
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
     Obstructions::RestoreAll();
+    RemoveShade();
     ShowPlayer();
 
     auto* player = RE::PlayerCharacter::GetSingleton();
@@ -923,14 +992,16 @@ void MenuCamera::Update(float interval)
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
-    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view. a hidden
-    // player is hidden again after, in case anything shows them
-    if (!merchantShown) {
+    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view, nor whoever's
+    // pickpocketed, as the player's crept up to them where they can be seen. a hidden player is hidden again after, in case anything shows them
+    if (!hidingPlayer) {
         Obstructions::Update(interval, subject, shown, upperBody);
     }
     if (hidingPlayer) {
         HidePlayer();
     }
+
+    UpdateShade(interval);
 }
 
 // FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
@@ -1067,6 +1138,61 @@ void MenuCamera::Restart()
     // if it can't start again (combat began), first person comes back as a close would
     if (!active && cachedFirstPerson) {
         RE::PlayerCamera::GetSingleton()->ForceFirstPerson();
+    }
+}
+
+// the menu's edges darken while the player sneaks unseen and clear as they're noticed, so it shows whether a theft would be seen. not in
+// barter or a follower's inventory. a paused menu keeps how it was as it opened, as nobody can notice them till it closes
+void MenuCamera::UpdateShade(float interval)
+{
+    constexpr float EASE  = 0.4f;   // seconds to darken or clear
+    constexpr float CHECK = 0.25f;  // seconds between detection checks
+
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    const bool sneaking = shadeAllowed && player->IsSneaking();
+    if (sneaking) {
+        shadeCheckIn -= interval;
+        if (shadeCheckIn <= 0.0f) {
+            shadeCheckIn = CHECK;
+            unseen = IsUnseen(player);
+        }
+    }
+
+    const float target = sneaking && unseen ? 1.0f : 0.0f;
+    const float step = interval / EASE;
+    shade = target > shade ? std::min(target, shade + step) : std::max(target, shade - step);
+
+    const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
+    if (!view) {
+        return;
+    }
+
+    RE::GFxValue clip;
+    if (!view->GetVariable(&clip, SHADE_PATH) || !clip.IsDisplayObject()) {
+        if (shade <= 0.0f) {
+            return;
+        }
+        CreateShade(view.get());
+        if (!view->GetVariable(&clip, SHADE_PATH) || !clip.IsDisplayObject()) {
+            return;
+        }
+    }
+
+    RE::GFxValue::DisplayInfo info;
+    clip.GetDisplayInfo(&info);
+    info.SetAlpha(shade * 100.0);
+    clip.SetDisplayInfo(info);
+}
+
+void MenuCamera::RemoveShade()
+{
+    shade = 0.0f;
+    shadeCheckIn = 0.0f;
+    unseen = false;
+    const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
+    RE::GFxValue clip;
+    if (view && view->GetVariable(&clip, SHADE_PATH) && clip.IsDisplayObject()) {
+        clip.Invoke("removeMovieClip");
     }
 }
 
