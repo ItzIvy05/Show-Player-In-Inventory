@@ -135,6 +135,7 @@ namespace
                         Row("$SPII_Zoom"_T, { KeyIcon(LEFT_CTRL), wheelIcon });
                         Row("$SPII_FOV"_T, { KeyIcon(LEFT_CTRL), KeyIcon(LEFT_SHIFT), wheelIcon });
                     }
+                    Row("$SPII_ResetDoubleClick"_T, { KeyIcon(FUCK::Keys::kMouse_Middle) });
                     FUCK::EndTabItem();
                 }
 
@@ -146,6 +147,7 @@ namespace
                         Row("$SPII_OrbitZoom"_T, { hold, KeyIcon(FUCK::Keys::kGP_RSX) });
                         Row("$SPII_FOV"_T, { hold, KeyIcon(FUCK::Keys::kIcon_Triggers) });
                     }
+                    Row("$SPII_Reset"_T, { hold, KeyIcon(FUCK::Keys::kGP_R3) });
                     FUCK::EndTabItem();
                 }
 
