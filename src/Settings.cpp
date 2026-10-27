@@ -15,6 +15,7 @@ namespace
         { "bRememberCamera",   &Settings::Values::rememberCamera },
         { "bRememberFacing",   &Settings::Values::rememberFacing },
         { "bHideObstructions", &Settings::Values::hideObstructions },
+        { "bSneakVignette",    &Settings::Values::sneakVignette },
         { "bUpperBody",        &Settings::Values::upperBody },
         { "bCameraControls",   &Settings::Values::cameraControls },
         { "bTutorialSeen",     &Settings::Values::tutorialSeen },

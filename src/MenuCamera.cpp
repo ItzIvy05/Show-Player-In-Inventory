@@ -1149,7 +1149,7 @@ void MenuCamera::UpdateShade(float interval)
     constexpr float CHECK = 0.25f;  // seconds between detection checks
 
     auto* player = RE::PlayerCharacter::GetSingleton();
-    const bool sneaking = shadeAllowed && player->IsSneaking();
+    const bool sneaking = shadeAllowed && Settings::values.sneakVignette && player->IsSneaking();
     if (sneaking) {
         shadeCheckIn -= interval;
         if (shadeCheckIn <= 0.0f) {

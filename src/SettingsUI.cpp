@@ -263,19 +263,20 @@ namespace
         if (BeginCheckboxes("##Settings")) {
             FUCK::TableNextColumn();
             BeginSection("$SPII_General"_T);
-            if (Checkbox("$SPII_Animate"_T, values.animateCharacter, "$SPII_AnimateTT"_T)) {
+            Checkbox("$SPII_HideObstructions"_T,     values.hideObstructions, "$SPII_HideObstructionsTT"_T);
+            if (Checkbox("$SPII_Animate"_T,          values.animateCharacter, "$SPII_AnimateTT"_T)) {
                 MenuCamera::GetSingleton()->ApplyAnimation();
             }
+            Checkbox("$SPII_SneakVignette"_T,        values.sneakVignette,    "$SPII_SneakVignetteTT"_T);
             if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
                 MenuCamera::ApplyItemPreviews();
             }
-            Checkbox("$SPII_HideObstructions"_T, values.hideObstructions, "$SPII_HideObstructionsTT"_T);
             EndSection();
 
             FUCK::TableNextColumn();
             BeginSection("$SPII_Camera"_T);
-            Checkbox("$SPII_TurnCharacter"_T, values.turnCharacter, "$SPII_TurnCharacterTT"_T);
-            Checkbox("$SPII_UpperBody"_T, values.upperBody, "$SPII_UpperBodyTT"_T);
+            Checkbox("$SPII_UpperBody"_T,      values.upperBody,      "$SPII_UpperBodyTT"_T);
+            Checkbox("$SPII_TurnCharacter"_T,  values.turnCharacter,  "$SPII_TurnCharacterTT"_T);
             Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
 
             FUCK::Indent();
