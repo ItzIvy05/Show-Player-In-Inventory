@@ -867,6 +867,27 @@ namespace Obstructions
         sinceCheck = 0.0f;
     }
 
+    bool IsLineClear(RE::Actor* around, const RE::NiPoint3& from, const RE::NiPoint3& to, std::initializer_list<const RE::TESObjectREFR*> ignore)
+    {
+        auto* cell = around ? around->GetParentCell() : nullptr;
+        auto* world = cell ? cell->GetbhkWorld() : nullptr;
+        if (!world) {
+            return true;
+        }
+
+        RE::CFilter filter{};
+        filter.SetSystemGroup(RE::bhkCollisionFilter::GetSingleton()->GetNewSystemGroup());
+        filter.SetCollisionLayer(RAY_LAYER);
+
+        bool clear = true;
+        CastRay(*world, filter, from, to, [&](RE::TESObjectREFR* ref) {
+            if (std::ranges::find(ignore, ref) == ignore.end()) {
+                clear = false;
+            }
+        });
+        return clear;
+    }
+
     void RestoreAll()
     {
         for (const auto& entry : hidden) {

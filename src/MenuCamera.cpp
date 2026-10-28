@@ -315,6 +315,62 @@ namespace
         }
     }
 
+    constexpr float FRONT_REACH  = 170.0f;                      // how far in front must be clear, about where a chest-up framing stands
+    constexpr float FRONT_CORNER = RE::NI_PI / 4.0f;            // a front corner, from straight ahead
+    constexpr float FRONT_PITCH  = 6.0f * RE::NI_PI / 180.0f;   // looking down at the chest, as FUCK's own front view does
+    constexpr float FRONT_BACK   = 300.0f;                      // where the camera starts, before the framing sets the distance
+
+    // between the head and pelvis, or nullopt without either
+    std::optional<RE::NiPoint3> ChestOf(RE::Actor* actor)
+    {
+        auto* model = actor->Get3D(false);
+        auto* head = model ? model->GetObjectByName("NPC Head [Head]") : nullptr;
+        auto* pelvis = model ? model->GetObjectByName("NPC Pelvis [Pelv]") : nullptr;
+        if (!head || !pelvis) {
+            return std::nullopt;
+        }
+        return (head->world.translate + pelvis->world.translate) * 0.5f;
+    }
+
+    // which way out from the chest is clear of walls and the like: straight ahead, else a front corner, the given side first, or nullopt if
+    // neither is
+    std::optional<float> ClearFront(RE::Actor* actor, const RE::NiPoint3& chest, float facing, float side, std::initializer_list<const RE::TESObjectREFR*> ignore)
+    {
+        for (const float offset : { 0.0f, FRONT_CORNER * side, -FRONT_CORNER * side }) {
+            const float out = facing + offset;
+            const RE::NiPoint3 reach = chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
+            if (Obstructions::IsLineClear(actor, chest, reach, ignore)) {
+                return out;
+            }
+        }
+        return std::nullopt;
+    }
+
+    // 1 when a point is round to the actor's left of where they face, else -1
+    float SideOf(const RE::NiPoint3& chest, float facing, const RE::NiPoint3& point)
+    {
+        return std::remainder(std::atan2(point.x - chest.x, point.y - chest.y) - facing, 2.0f * RE::NI_PI) >= 0.0f ? 1.0f : -1.0f;
+    }
+
+    // the merchant from in front, or a clear front corner, the player's side first (at a tanning rack or a forge their front is up against
+    // it), else past the player as they see them. the framing then sets the distance
+    void AimAtMerchant(RE::Actor* merchant, RE::PlayerCharacter* player, RE::PlayerCamera* camera)
+    {
+        const auto chest = ChestOf(merchant);
+        if (!chest) {
+            return;
+        }
+
+        const RE::NiPoint3 from = player->GetPosition();
+        const float facing = merchant->GetAngleZ();
+        if (const auto out = ClearFront(merchant, *chest, facing, SideOf(*chest, facing, from), { merchant, player })) {
+            AimCamera(camera, *chest, *out + RE::NI_PI, FRONT_PITCH, FRONT_BACK);
+            return;
+        }
+
+        AimCamera(camera, *chest, std::atan2(chest->x - from.x, chest->y - from.y), FRONT_PITCH, std::hypot(chest->x - from.x, chest->y - from.y) + 100.0f);
+    }
+
     // who the player's talking to, or nullptr
     RE::Actor* GetConversationPartner()
     {
@@ -750,7 +806,7 @@ void MenuCamera::Start(std::string_view menuName)
     // - looting, or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them.
     //   pickpocketing too, so whoever's robbed is seen as the player sees them, and never turned
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
-    // - a merchant shown is seen from the player's side of the counter, where they already face, chest up and never turned
+    // - a merchant shown is seen from their front, or wherever's clear (AimAtMerchant), chest up and never turned
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
     const bool fromBehind = looting;
     const bool seated = sitting || lying;
@@ -769,11 +825,26 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     const bool turnCharacter = !shownMerchant && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
-    const bool cameraToFront = shownMerchant || (!moving && !fromBehind && (!turnCharacter || (talking && shownFollower)));
+    const bool cameraToFront = !shownMerchant && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
     // game's. otherwise the view carries on from the game's camera
-    const bool freshBase = cameraToFront || talking;
+    const bool freshBase = !shownMerchant && (cameraToFront || talking);
+
+    // a front view up against a wall (a shelf, a bookcase) comes round to a clear front corner instead, the camera's side first, aimed here
+    // as the merchant's is. straight ahead stays FUCK's own front view. not lying down or on a dragon, whose views FUCK places itself
+    const bool flying = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
+    bool frontCorner = false;
+    if (const auto chest = cameraToFront && !lying && !flying ? ChestOf(subject) : std::nullopt) {
+        auto* cameraRoot = camera->cameraRoot.get();
+        const RE::NiPoint3 eye = cameraRoot ? cameraRoot->world.translate : player->GetPosition();
+        const float facing = subject->GetAngleZ();
+        const auto out = ClearFront(subject, *chest, facing, SideOf(*chest, facing, eye), { subject, player, horse.get() });
+        if (out && *out != facing) {
+            AimCamera(camera, *chest, *out + RE::NI_PI, FRONT_PITCH, FRONT_BACK);
+            frontCorner = true;
+        }
+    }
 
     // the player's look is levelled, so they don't hold their head looking up or down. not in a conversation, whose camera aims with it
     pitchLevelled = !talking;
@@ -783,6 +854,9 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // on horseback on the move, the view behind starts from the same place each time, rather than wherever the camera was aimed
+    if (shownMerchant) {
+        AimAtMerchant(shownMerchant, player, camera);
+    }
     if (moving && horse) {
         MoveCameraBehindMount(horse.get(), subject, camera);
     }
@@ -803,10 +877,10 @@ void MenuCamera::Start(std::string_view menuName)
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
-    if (cameraToFront) {
+    if (cameraToFront && !frontCorner) {
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
-    if (freshBase) {
+    if (freshBase && !frontCorner) {
         options.flags |= FUCK::CameraSessionFlags::kFreshBase;
     }
 

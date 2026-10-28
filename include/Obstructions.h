@@ -10,4 +10,7 @@ namespace Obstructions
 
     // brings back everything hidden here. safe to call any time
     void RestoreAll();
+
+    // nothing with collision that blocks sight lies between the two points, besides those given
+    [[nodiscard]] bool IsLineClear(RE::Actor* around, const RE::NiPoint3& from, const RE::NiPoint3& to, std::initializer_list<const RE::TESObjectREFR*> ignore);
 }
