@@ -345,6 +345,12 @@ namespace
 
             FUCK::TableNextColumn();
             BeginSection("$SPII_Adjust"_T);
+            // 0 to 15, a tenth of the extra width each
+            if (FUCK::ScaledSliderFloat("$SPII_WideScreenShift"_T, &values.wideScreenShift, 0.0f, 1.5f, 10.0f)) {
+                Settings::Save();
+                camera->ApplyFraming();
+            }
+            FUCK::SetTooltip("$SPII_WideScreenShiftTT"_T);
             if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
                 FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
             }
@@ -367,6 +373,7 @@ namespace
                 Settings::Save();
                 EventProcessor::GetSingleton()->ApplyLiveSettings();
                 MenuCamera::GetSingleton()->ApplyAnimation();
+                MenuCamera::GetSingleton()->ApplyFraming();
             }
             FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
             EndSection();

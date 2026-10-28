@@ -25,6 +25,9 @@ namespace Settings
         float itemPreviewY     = 0.0f;
         float itemPreviewScale = 1.0f;
 
+        // on a screen wider than 16:9, how much of the extra width the player's moved right into, away from the item list
+        float wideScreenShift  = 0.7f;
+
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
         bool hideApparelPreviewItems = true;
 

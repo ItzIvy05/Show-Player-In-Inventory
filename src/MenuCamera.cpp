@@ -15,15 +15,17 @@ namespace
     constexpr std::array CONTROLS{ UEFlag::kPOVSwitch, UEFlag::kWheelZoom, UEFlag::kLooking };
 
     // the body framed from the top of the screen nearly to the bottom, as -1 to 1 from the bottom up
-    constexpr float FRAMING_TOP = 1.0f;
+    constexpr float FRAMING_TOP    = 1.0f;
     constexpr float FRAMING_BOTTOM = -0.9f;
 
     // where the item list ends when it can't be read, as a share of the screen's width
     constexpr float DEFAULT_LIST_EDGE = 0.45f;
 
-    // at a workbench with its own camera, how far across from the list the player's framed (0 at its edge, 1 at the screen's), leaving the
-    // station room
-    constexpr float BENCH_ACROSS = 0.1f;
+    // how far across from the list the player's framed at 16:9 (0 at its edge, 1 at the screen's), and at a workbench with its own
+    // camera, nearer, leaving the station room. on a wider screen, further right by the Wide Screen Shift setting's share of the extra width
+    constexpr float FRAMING_ACROSS = 0.5f;
+    constexpr float BENCH_ACROSS   = 0.1f;
+    constexpr float NORMAL_ASPECT  = 16.0f / 9.0f;
 
     // where skyui's list panel comes to rest in its menus once it has slid in (InventoryLists.swf: from -100 to 25 as the menu opens)
     constexpr float PANEL_REST_X = 25.0f;
@@ -38,14 +40,14 @@ namespace
     // someone held by the one shown (carried, or riding behind them) has their 3D closer to them, or to their horse, than two people can
     // stand. measured across the ground, as someone carried sits up at the carrier's arm or shoulder, and only so far up or down, so
     // someone on the floor above or below isn't counted. a 3D further than HELD_REACH from its own actor is posed there by another mod
-    constexpr float HELD_REACH = 50.0f;
+    constexpr float HELD_REACH  = 50.0f;
     constexpr float HELD_HEIGHT = 250.0f;
 
     // an animal posed in your arms by another mod sits further out in front of you, so it's looked for this far away
     constexpr float POSED_REACH = 120.0f;
 
     // the room round the body when they're holding someone, so whoever's riding behind or carried fits in too (FUCK's own is 1.15)
-    constexpr float HOLDING_MARGIN = 1.4f;
+    constexpr float HOLDING_MARGIN    = 1.4f;
     constexpr float CLOSE_WORK_MARGIN = 1.4f;  // room round the upper body at a desk's alchemy lab or enchanter
 
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
@@ -139,12 +141,34 @@ namespace
             .value_or(DEFAULT_LIST_EDGE);
     }
 
-    // the body framed the given share of the way from the item list's edge to the screen's right edge, halfway by default
-    FUCK::CameraScreenRect GetFraming(float listEdge, float across = 0.5f)
+    // on a wider screen than 16:9, how far right the player's moved into the extra width, in half the screen's height
+    float GetWideShift(float aspect)
     {
-        // -1 to 1 across the screen
-        const float leftX = listEdge * 2.0f - 1.0f;
-        return { leftX + (1.0f - leftX) * across, (FRAMING_TOP + FRAMING_BOTTOM) * 0.5f, (FRAMING_TOP - FRAMING_BOTTOM) * 0.5f };
+        return Settings::values.wideScreenShift * std::max(aspect - NORMAL_ASPECT, 0.0f);
+    }
+
+    float GetWideShift()
+    {
+        const ImVec2 display = FUCK::GetDisplaySize();
+        return display.y > 0.0f ? GetWideShift(display.x / display.y) : 0.0f;
+    }
+
+    // the body framed between the item list's edge and the screen's right edge (FRAMING_ACROSS, or BENCH_ACROSS at a bench), where it
+    // is at 16:9, the same distance from the screen's middle on a wider screen plus the wide screen shift, so the player can sit more
+    // in the wider space rather than by the list
+    FUCK::CameraScreenRect GetFraming(float listEdge, bool bench = false)
+    {
+        constexpr float MIDDLE_Y = (FRAMING_TOP + FRAMING_BOTTOM) * 0.5f;
+        constexpr float HALF_HEIGHT = (FRAMING_TOP - FRAMING_BOTTOM) * 0.5f;
+
+        const ImVec2 display = FUCK::GetDisplaySize();
+        const float aspect = display.y > 0.0f ? display.x / display.y : NORMAL_ASPECT;
+
+        // in half the screen's height from its middle, where the list keeps its width as the screen widens
+        const float across = bench ? BENCH_ACROSS : FRAMING_ACROSS;
+        const float list = listEdge * 2.0f * aspect;
+        const float x = list - NORMAL_ASPECT + across * (2.0f * NORMAL_ASPECT - list) + GetWideShift(aspect);
+        return { x / aspect, MIDDLE_Y, HALF_HEIGHT };
     }
 
     bool IsCursorOverList()
@@ -487,12 +511,13 @@ namespace
         return view;
     }
 
-    void PlaceBenchCamera(RE::PlayerCharacter* player, RE::PlayerCamera* camera, const BenchView& view)
+    // a hand-set view returns how far the wide screen shift slides it per unit, in game units, to move it by later. 0 for the others
+    float PlaceBenchCamera(RE::PlayerCharacter* player, RE::PlayerCamera* camera, const BenchView& view)
     {
         auto* root = camera->cameraRoot.get();
         const auto chest = ChestOf(player);
         if (!root || !chest) {
-            return;
+            return 0.0f;
         }
 
         const float facing = player->GetAngleZ();
@@ -502,7 +527,25 @@ namespace
             const RE::NiPoint3 right{ std::cos(facing), -std::sin(facing), 0.0f };
             const RE::NiPoint3 eye = *chest + right * shot->right + ahead * shot->forward + RE::NiPoint3{ 0.0f, 0.0f, shot->up };
             PlaceCamera(camera, eye, facing + shot->round * RADIANS, shot->down * RADIANS);
-            return;
+
+            // on a wider screen, slid left by the wide screen shift, as framed views are. the shift is in half the screen's height, so
+            // it's that much of the view's height where the chest is
+            auto* worldCamera = RE::Main::WorldRootCamera();
+            const float tanHalfHeight = worldCamera ? worldCamera->GetRuntimeData2().viewFrustum.fTop : 0.0f;
+            const auto& rotate = root->local.rotate;
+            const RE::NiPoint3 across{ rotate.entry[0][0], rotate.entry[1][0], rotate.entry[2][0] };
+            const RE::NiPoint3 forward{ rotate.entry[0][1], rotate.entry[1][1], rotate.entry[2][1] };
+            const float depth = (*chest - eye).Dot(forward);
+            if (tanHalfHeight <= 0.0f || depth <= 1.0f) {
+                return 0.0f;
+            }
+            const float perShift = depth * tanHalfHeight;
+            if (const float shift = GetWideShift(); shift > 0.0f) {
+                root->local.translate -= across * (shift * perShift);
+                RE::NiUpdateData data{};
+                root->Update(data);
+            }
+            return perShift;
         }
 
         // anticlockwise round the chest from above
@@ -861,8 +904,8 @@ void MenuCamera::Start(std::string_view menuName)
 
     // at a workbench (see BenchView)
     const auto bench = crafting && !furnitureBase && camera->cameraRoot ? std::optional{ GetBenchView(player, camera) } : std::nullopt;
-    benchPlaced = bench && bench->shot;
-    framingAcross = bench && bench->ownCamera ? BENCH_ACROSS : 0.5f;
+    benchPlaced      = bench && bench->shot;
+    benchFraming     = bench && bench->ownCamera;
 
     playerAngleX = player->GetAngleX();
     playerAngleZ = player->GetAngleZ();
@@ -1052,7 +1095,9 @@ void MenuCamera::Start(std::string_view menuName)
         AimAtMark(shownVictim, player, camera);
     }
     if (bench) {
-        PlaceBenchCamera(player, camera, *bench);
+        benchShiftScale = PlaceBenchCamera(player, camera, *bench);
+        benchShiftPlaced = GetWideShift();
+        benchShift = benchShiftPlaced;
     }
     if (moving && horse) {
         MoveCameraBehindMount(horse.get(), subject, camera);
@@ -1126,7 +1171,7 @@ void MenuCamera::Start(std::string_view menuName)
     }
     framingMargin = options.framingMargin;
     options.startFramed = !bench;
-    options.framingRect = GetFraming(GetListEdge(), framingAcross);
+    options.framingRect = GetFraming(GetListEdge(), benchFraming);
 
     if (!FUCK::BeginCameraSession(options)) {
         logger::warn("[MenuCamera] FUCK's camera wouldn't start.");
@@ -1179,6 +1224,7 @@ void MenuCamera::Stop()
     }
     furnitureBase = false;
     benchPlaced = false;
+    benchShiftScale = 0.0f;
     if (!restarting) {
         previewShowsPlayer = false;
         previewOffFor      = 0.0f;
@@ -1553,6 +1599,29 @@ void MenuCamera::SetFrozen(bool freeze)
     }
 }
 
+// the body framed afresh, after the wide screen shift changes. a hand-set bench view is slid across by the change instead, through
+// FUCK's offsets, so any move of the user's is kept
+void MenuCamera::ApplyFraming()
+{
+    if (!HasCamera()) {
+        return;
+    }
+    if (!benchPlaced) {
+        if (FUCK::IsCameraBodyFramed(this)) {
+            FUCK::SetCameraBodyFraming(this, true, GetFraming(GetListEdge(), benchFraming), framingMargin);
+        }
+        return;
+    }
+
+    const float shift = GetWideShift();
+    FUCK::CameraOffsets offsets;
+    if (benchShiftScale > 0.0f && shift != benchShift && FUCK::GetCameraOffsets(this, offsets)) {
+        offsets.translate.x -= (shift - benchShift) * benchShiftScale;
+        FUCK::SetCameraOffsets(this, offsets);
+        benchShift = shift;
+    }
+}
+
 // back to the starting framing, swooping there from where the camera is
 void MenuCamera::ResetCamera()
 {
@@ -1562,8 +1631,13 @@ void MenuCamera::ResetCamera()
 
     FUCK::ResetCamera(this);
     if (!benchPlaced) {
-        FUCK::SetCameraBodyFraming(this, true, GetFraming(GetListEdge(), framingAcross), framingMargin);
+        FUCK::SetCameraBodyFraming(this, true, GetFraming(GetListEdge(), benchFraming), framingMargin);
+        return;
     }
+
+    // a hand-set bench view's back where it was placed, then slid by any change to the wide screen shift since
+    benchShift = benchShiftPlaced;
+    ApplyFraming();
 }
 
 void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)

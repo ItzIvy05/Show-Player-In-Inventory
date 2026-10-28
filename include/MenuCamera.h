@@ -14,6 +14,7 @@ public:
     void        Stop();
     void        Update(float interval);
     void        ResetCamera();
+    void        ApplyFraming();
     void        ApplyAnimation();
     static void ApplyItemPreviews();
     bool        DrawPositionSliders();
@@ -54,9 +55,12 @@ private:
     bool  merchantShown    = false;  // a merchant in barter, whose counter and face are left alone
     bool  hidingPlayer     = false;  // the player's kept hidden, from in front of a merchant
     bool  furnitureBase    = false;  // FUCK's controls over the furniture camera (a crafting menu), which is never left
-    float framingAcross    = 0.5f;   // how far across from the list the body's framed (see GetFraming)
+    bool  benchFraming     = false;  // framed as at a bench, nearer the list (see GetFraming)
     float framingMargin    = 0.0f;   // and the room round it, 0 for FUCK's
     bool  benchPlaced      = false;  // a bench camera set by hand, so not framed
+    float benchShiftScale  = 0.0f;   // and how far the wide screen shift slides it per unit, 0 when it can't
+    float benchShiftPlaced = 0.0f;   // the shift it was placed with
+    float benchShift       = 0.0f;   // and the shift it's slid to since
     bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed
     
     std::vector<RE::NiPointer<RE::NiAVObject>> hiddenParts;  // and the parts of them hidden here, to show again

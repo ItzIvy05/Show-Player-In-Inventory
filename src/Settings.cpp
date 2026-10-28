@@ -26,6 +26,7 @@ namespace
         { "fItemPreviewY",     &Settings::Values::itemPreviewY },
         { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
         { "bHideAppPrevItems", &Settings::Values::hideApparelPreviewItems },
+        { "fWideScreenShift",  &Settings::Values::wideScreenShift },
         { "fSpotAspect",       &Settings::Values::spotAspect },
         { "fCardSpotX",        &Settings::Values::cardSpotX },
         { "fCardSpotTop",      &Settings::Values::cardSpotTop },
