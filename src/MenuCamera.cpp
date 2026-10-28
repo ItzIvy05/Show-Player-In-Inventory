@@ -371,6 +371,33 @@ namespace
         AimCamera(camera, *chest, std::atan2(chest->x - from.x, chest->y - from.y), FRONT_PITCH, std::hypot(chest->x - from.x, chest->y - from.y) + 100.0f);
     }
 
+    // whoever's pickpocketed, side on to the pair so the player stands beside them rather than in the way: the side the mark faces first,
+    // else the other, else a corner behind the player, else straight past them. the framing then fits both
+    void AimAtMark(RE::Actor* mark, RE::PlayerCharacter* player, RE::PlayerCamera* camera)
+    {
+        constexpr float SIDE   = RE::NI_PI / 2.0f;
+        constexpr float CORNER = 35.0f * RE::NI_PI / 180.0f;
+        constexpr float PITCH  = 10.0f * RE::NI_PI / 180.0f;
+
+        const auto chest = ChestOf(mark);
+        if (!chest) {
+            return;
+        }
+
+        const RE::NiPoint3 from = player->GetPosition();
+        const float toPlayer = std::atan2(from.x - chest->x, from.y - chest->y);
+        const float frontSide = std::remainder(mark->GetAngleZ() - toPlayer, 2.0f * RE::NI_PI) >= 0.0f ? 1.0f : -1.0f;
+
+        for (const float offset : { SIDE * frontSide, -SIDE * frontSide, CORNER * frontSide, -CORNER * frontSide, 0.0f }) {
+            const float out = toPlayer + offset;
+            const RE::NiPoint3 reach = *chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
+            if (offset == 0.0f || Obstructions::IsLineClear(mark, *chest, reach, { mark, player })) {
+                AimCamera(camera, *chest, out + RE::NI_PI, PITCH, FRONT_BACK);
+                return;
+            }
+        }
+    }
+
     // who the player's talking to, or nullptr
     RE::Actor* GetConversationPartner()
     {
@@ -694,12 +721,17 @@ void MenuCamera::Start(std::string_view menuName)
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
     auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
-    // the player out of the way of a merchant or whoever's being robbed, as they stand right in front
+    // the player out of the way of a merchant, as they stand right in front. not pickpocketing, where they're seen sneaking up, and can
+    // follow someone walking off with skyrim souls
     merchantShown = shownMerchant != nullptr;
-    hidingPlayer = merchantShown || shownVictim;
+    hidingPlayer = merchantShown;
     if (hidingPlayer) {
         HidePlayer();
     }
+
+    // nothing's hidden round a merchant, whose counter is part of the view, nor whoever's pickpocketed, as the player's crept up to them
+    // where they can be seen
+    keepObstructions = merchantShown || shownVictim;
 
     // the one shown faces the camera, so their head would turn round to look where it looks
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
@@ -770,7 +802,7 @@ void MenuCamera::Start(std::string_view menuName)
         carrier = subjectModel->GetObjectByName("NPC Pelvis [Pelv]");
     }
     held.clear();
-    auto* processes = hidingPlayer ? nullptr : RE::ProcessLists::GetSingleton();  // not round a merchant or victim, where it'd catch the player
+    auto* processes = keepObstructions ? nullptr : RE::ProcessLists::GetSingleton();  // not round a merchant or victim, where it'd catch the player
     if (processes) {
         for (const auto& handle : processes->highActorHandles) {
             const auto actor = handle.get();
@@ -804,7 +836,7 @@ void MenuCamera::Start(std::string_view menuName)
     //   lying down, riding, or holding someone. turning them would take them off the seat or bed, and the game or a mod only brings a
     //   horse or whoever they hold round with them over a few frames, so it'd be seen catching up
     // - looting, or on the move, it stays behind them, as turning them away from the chest looks wrong and the view should follow them.
-    //   pickpocketing too, so whoever's robbed is seen as the player sees them, and never turned
+    //   pickpocketing too, side on to the pair (AimAtMark), and never turned
     // - in a conversation the same, but a follower shown already faces the player, so the view comes from the player's side
     // - a merchant shown is seen from their front, or wherever's clear (AimAtMerchant), chest up and never turned
     const bool looting = menuName == RE::ContainerMenu::MENU_NAME && !shownFollower;
@@ -857,6 +889,9 @@ void MenuCamera::Start(std::string_view menuName)
     if (shownMerchant) {
         AimAtMerchant(shownMerchant, player, camera);
     }
+    if (shownVictim) {
+        AimAtMark(shownVictim, player, camera);
+    }
     if (moving && horse) {
         MoveCameraBehindMount(horse.get(), subject, camera);
     }
@@ -872,6 +907,10 @@ void MenuCamera::Start(std::string_view menuName)
     options.client = this;
     options.base = FUCK::CameraBase::kThirdPerson;
     options.subject = shownOther;
+    // pickpocketing, the player's framed beside the mark
+    if (shownVictim) {
+        options.alsoFramed = player;
+    }
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
     if (!moving && turnCharacter) {
@@ -978,8 +1017,9 @@ void MenuCamera::Stop()
         subject->Update3DPosition(true);
     }
     follower = {};
-    merchantShown = false;
-    hidingPlayer = false;
+    merchantShown    = false;
+    hidingPlayer     = false;
+    keepObstructions = false;
 
     mount = {};
 
@@ -1072,9 +1112,8 @@ void MenuCamera::Update(float interval)
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
-    // once the camera is placed, so it's what this frame sees from. not round a merchant, whose counter is part of the view, nor whoever's
-    // pickpocketed, as the player's crept up to them where they can be seen. a hidden player is hidden again after, in case anything shows them
-    if (!hidingPlayer) {
+    // once the camera is placed, so it's what this frame sees from. a hidden player is hidden again after, in case anything shows them
+    if (!keepObstructions) {
         Obstructions::Update(interval, subject, shown, upperBody);
     }
     if (hidingPlayer) {
@@ -1276,26 +1315,31 @@ void MenuCamera::RemoveShade()
     }
 }
 
-// the player out of the way of whoever's shown in front of them, as their own 3D (not first person's). only if it was drawn, so it's only
-// put back then
+// the player out of the way of whoever's shown in front of them, by each part under their own 3D (not first person's), as outdoors the
+// game shows the 3D itself again every frame. only parts that were drawn, so only those are put back
 void MenuCamera::HidePlayer()
 {
     auto* model = RE::PlayerCharacter::GetSingleton()->Get3D(false);
-    if (model && !model->GetAppCulled()) {
-        model->SetAppCulled(true);
-        playerHidden = true;
+    auto* node = model ? model->AsNode() : nullptr;
+    if (!node) {
+        return;
+    }
+    for (auto& part : node->GetChildren()) {
+        if (part && !part->GetAppCulled()) {
+            part->SetAppCulled(true);
+            hiddenParts.emplace_back(part);
+        }
     }
 }
 
 void MenuCamera::ShowPlayer()
 {
-    if (!playerHidden) {
-        return;
+    for (auto& part : hiddenParts) {
+        if (part) {
+            part->SetAppCulled(false);
+        }
     }
-    playerHidden = false;
-    if (auto* model = RE::PlayerCharacter::GetSingleton()->Get3D(false)) {
-        model->SetAppCulled(false);
-    }
+    hiddenParts.clear();
 }
 
 // whether this frame's animation is run here for someone shown: not for a held animal another mod poses itself, nor for the one holding

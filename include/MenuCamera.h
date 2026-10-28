@@ -49,10 +49,13 @@ private:
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
 
-    bool upperBody     = false;  // framed from the chest up
-    bool merchantShown = false;  // a merchant in barter, whose counter and face are left alone
-    bool hidingPlayer  = false;  // the player's kept hidden, from in front of a merchant or whoever's pickpocketed
-    bool playerHidden  = false;  // and was drawn when hidden, so is shown again
+    bool  pitchLevelled    = false;  // the player's look was levelled, to put back
+    bool  upperBody        = false;  // framed from the chest up
+    bool  merchantShown    = false;  // a merchant in barter, whose counter and face are left alone
+    bool  hidingPlayer     = false;  // the player's kept hidden, from in front of a merchant
+    bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed
+    
+    std::vector<RE::NiPointer<RE::NiAVObject>> hiddenParts;  // and the parts of them hidden here, to show again
 
     // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them
     std::string shownMenu;
