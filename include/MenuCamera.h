@@ -53,6 +53,10 @@ private:
     bool  upperBody        = false;  // framed from the chest up
     bool  merchantShown    = false;  // a merchant in barter, whose counter and face are left alone
     bool  hidingPlayer     = false;  // the player's kept hidden, from in front of a merchant
+    bool  furnitureBase    = false;  // FUCK's controls over the furniture camera (a crafting menu), which is never left
+    float framingAcross    = 0.5f;   // how far across from the list the body's framed (see GetFraming)
+    float framingMargin    = 0.0f;   // and the room round it, 0 for FUCK's
+    bool  benchPlaced      = false;  // a bench camera set by hand, so not framed
     bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed
     
     std::vector<RE::NiPointer<RE::NiAVObject>> hiddenParts;  // and the parts of them hidden here, to show again
@@ -97,6 +101,8 @@ private:
     bool cacheFrozen       = false;
     bool headTrackingWasOn = false;
     bool playerFrozen      = false;
+
+    bool firstPersonAfterBench = false;  // back to first person once the player's left a workbench
 
     // the cursor was on the item list when the mouse buttons went down, so they belong to the list
     bool mouseOnList = false;

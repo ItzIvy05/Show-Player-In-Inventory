@@ -20,6 +20,10 @@ namespace
     // where the item list ends when it can't be read, as a share of the screen's width
     constexpr float DEFAULT_LIST_EDGE = 0.45f;
 
+    // at a workbench with its own camera, how far across from the list the player's framed (0 at its edge, 1 at the screen's), leaving the
+    // station room
+    constexpr float BENCH_ACROSS = 0.1f;
+
     // where skyui's list panel comes to rest in its menus once it has slid in (InventoryLists.swf: from -100 to 25 as the menu opens)
     constexpr float PANEL_REST_X = 25.0f;
 
@@ -41,6 +45,7 @@ namespace
 
     // the room round the body when they're holding someone, so whoever's riding behind or carried fits in too (FUCK's own is 1.15)
     constexpr float HOLDING_MARGIN = 1.4f;
+    constexpr float CLOSE_WORK_MARGIN = 1.4f;  // room round the upper body at a desk's alchemy lab or enchanter
 
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
@@ -133,12 +138,12 @@ namespace
             .value_or(DEFAULT_LIST_EDGE);
     }
 
-    // the body framed halfway between the item list's edge and the screen's right edge, as FUCK-RACE's Quick Zoom frames right of its slider list
-    FUCK::CameraScreenRect GetFraming(float listEdge)
+    // the body framed the given share of the way from the item list's edge to the screen's right edge, halfway by default
+    FUCK::CameraScreenRect GetFraming(float listEdge, float across = 0.5f)
     {
-        // -1 to 1 across the screen, so halfway to the right edge (1) is the average
+        // -1 to 1 across the screen
         const float leftX = listEdge * 2.0f - 1.0f;
-        return { (leftX + 1.0f) * 0.5f, (FRAMING_TOP + FRAMING_BOTTOM) * 0.5f, (FRAMING_TOP - FRAMING_BOTTOM) * 0.5f };
+        return { leftX + (1.0f - leftX) * across, (FRAMING_TOP + FRAMING_BOTTOM) * 0.5f, (FRAMING_TOP - FRAMING_BOTTOM) * 0.5f };
     }
 
     bool IsCursorOverList()
@@ -279,7 +284,8 @@ namespace
 
     // places the third-person camera looking at a point along the heading (from +y towards +x), tilted down by the pitch, this far back.
     // FUCK's framing then sets the distance
-    void AimCamera(RE::PlayerCamera* camera, const RE::NiPoint3& at, float heading, float pitch, float back)
+    // the camera at eye, looking the given way (heading as the player's, pitch down)
+    void PlaceCamera(RE::PlayerCamera* camera, const RE::NiPoint3& eye, float heading, float pitch)
     {
         auto* root = camera->cameraRoot.get();
         if (!root) {
@@ -299,10 +305,16 @@ namespace
             rotate.entry[row][1] = forward[row];
             rotate.entry[row][2] = up[row];
         }
-        root->local.translate = at - forward * back;
+        root->local.translate = eye;
 
         RE::NiUpdateData data{};
         root->Update(data);
+    }
+
+    void AimCamera(RE::PlayerCamera* camera, const RE::NiPoint3& at, float heading, float pitch, float back)
+    {
+        const RE::NiPoint3 forward{ std::sin(heading) * std::cos(pitch), std::cos(heading) * std::cos(pitch), -std::sin(pitch) };
+        PlaceCamera(camera, at - forward * back, heading, pitch);
     }
 
     // behind a horse on the move, a little above, looking down along the way it heads, so the framing starts from the same view however
@@ -396,6 +408,119 @@ namespace
                 return;
             }
         }
+    }
+
+    // a bench camera set by hand, from the player's chest and facing: right, forward and up, then round (clockwise from above) and down in
+    // degrees
+    struct BenchShot
+    {
+        float right;
+        float forward;
+        float up;
+        float round;
+        float down;
+    };
+
+    constexpr BenchShot WORKBENCH_SHOT  { 112.0f, -66.2f, 57.2f, -66.4f, 30.0f };  // also the anvil, and any bench without its own camera
+    constexpr BenchShot GRINDSTONE_SHOT { 102.2f, -47.0f, 57.7f, -77.1f, 30.0f };
+    constexpr BenchShot ALCHEMY_LAB_SHOT{ 130.4f, -66.6f, 34.9f, -70.8f, 21.5f };  // free-standing, not on a desk
+    constexpr BenchShot ENCHANTER_SHOT  { 96.1f, -124.7f, 10.3f, -45.0f, 10.2f };  // free-standing, not on a desk
+
+    RE::TESFurniture* GetWorkbench(RE::Actor* actor, RE::NiPointer<RE::TESObjectREFR>* ref = nullptr)
+    {
+        auto bench = actor->GetOccupiedFurniture().get();
+        auto* base = bench ? bench->GetBaseObject() : nullptr;
+        auto* furniture = base ? base->As<RE::TESFurniture>() : nullptr;
+        if (!furniture || furniture->workBenchData.benchType.underlying() == 0) {
+            return nullptr;
+        }
+        if (ref) {
+            *ref = bench;
+        }
+        return furniture;
+    }
+
+    // how a workbench is shown: the grindstone, a free-standing alchemy lab or enchanter, and any bench without its own camera get one set
+    // by hand (shot), unframed. any other starts from its own camera turned 45 degrees anticlockwise round the player (25 at a desk's
+    // alchemy lab or enchanter, framed chest up) and eases into the framing, near the list
+    struct BenchView
+    {
+        RE::NiTransform game;  // the game's camera as the menu opened
+        std::optional<BenchShot> shot;
+        bool ownCamera = false;  // the bench animation's
+        bool desk = false;       // an alchemy lab or enchanter on a desk
+    };
+
+    BenchView GetBenchView(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
+    {
+        using BenchType = RE::TESFurniture::WorkBenchData::BenchType;
+
+        // a desk's alchemy lab or enchanter sits up on it, its bottom at least this far above the player's feet
+        constexpr float ON_A_DESK = 30.0f;
+
+        BenchView view;
+        view.game = camera->cameraRoot->world;
+        const auto state = camera->currentState->id;
+        view.ownCamera = state == RE::CameraState::kAnimated || state == RE::CameraState::kPCTransition;
+
+        RE::NiPointer<RE::TESObjectREFR> bench;
+        if (auto* furniture = GetWorkbench(player, &bench)) {
+            const auto type = static_cast<BenchType>(furniture->workBenchData.benchType.underlying());
+            const bool alchemy = type == BenchType::kAlchemy || type == BenchType::kAlchemyExperiment;
+            const bool enchanting = type == BenchType::kEnchanting || type == BenchType::kEnchantingExperiment;
+            const float bottom = bench->GetPositionZ() + static_cast<float>(furniture->boundData.boundMin.z) * bench->GetScale();
+            const bool onFloor = bottom - player->GetPositionZ() < ON_A_DESK;
+
+            view.desk = (alchemy || enchanting) && !onFloor;
+            if (alchemy && onFloor) {
+                view.shot = ALCHEMY_LAB_SHOT;
+            } else if (enchanting && onFloor) {
+                view.shot = ENCHANTER_SHOT;
+            } else if (type == BenchType::kSmithingWeapon) {
+                view.shot = GRINDSTONE_SHOT;
+            }
+        }
+        if (!view.shot && !view.ownCamera) {
+            view.shot = WORKBENCH_SHOT;
+        }
+        return view;
+    }
+
+    void PlaceBenchCamera(RE::PlayerCharacter* player, RE::PlayerCamera* camera, const BenchView& view)
+    {
+        auto* root = camera->cameraRoot.get();
+        const auto chest = ChestOf(player);
+        if (!root || !chest) {
+            return;
+        }
+
+        const float facing = player->GetAngleZ();
+        if (const auto& shot = view.shot) {
+            constexpr float RADIANS = RE::NI_PI / 180.0f;
+            const RE::NiPoint3 ahead{ std::sin(facing), std::cos(facing), 0.0f };
+            const RE::NiPoint3 right{ std::cos(facing), -std::sin(facing), 0.0f };
+            const RE::NiPoint3 eye = *chest + right * shot->right + ahead * shot->forward + RE::NiPoint3{ 0.0f, 0.0f, shot->up };
+            PlaceCamera(camera, eye, facing + shot->round * RADIANS, shot->down * RADIANS);
+            return;
+        }
+
+        // anticlockwise round the chest from above
+        const float angle = (view.desk ? 25.0f : 45.0f) * RE::NI_PI / 180.0f;
+        RE::NiMatrix3 turn;
+        turn.entry[0][0] = std::cos(angle);
+        turn.entry[0][1] = -std::sin(angle);
+        turn.entry[0][2] = 0.0f;
+        turn.entry[1][0] = std::sin(angle);
+        turn.entry[1][1] = std::cos(angle);
+        turn.entry[1][2] = 0.0f;
+        turn.entry[2][0] = 0.0f;
+        turn.entry[2][1] = 0.0f;
+        turn.entry[2][2] = 1.0f;
+
+        root->local.rotate = turn * view.game.rotate;
+        root->local.translate = *chest + turn * (view.game.translate - *chest);
+        RE::NiUpdateData data{};
+        root->Update(data);
     }
 
     // who the player's talking to, or nullptr
@@ -627,6 +752,7 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::MagicMenu>::Install();
     AdvanceMovieHook<RE::BarterMenu>::Install();
     AdvanceMovieHook<RE::ContainerMenu>::Install();
+    AdvanceMovieHook<RE::CraftingMenu>::Install();
     EquipNotifyHook::Install();
     ApplyItemPreviews();
     if (HasApparelPreview()) {
@@ -674,9 +800,29 @@ RE::Actor* MenuCamera::GetSubject() const
     return RE::PlayerCharacter::GetSingleton();
 }
 
+// not the third person the game switches to for a workbench's animation, so a crafting menu opened from first person goes back to it,
+// once the player's left the bench
 void MenuCamera::OnPerspectiveUpdate(bool firstPerson)
 {
-    if (!active && !cacheFrozen) {
+    if (active) {
+        return;
+    }
+
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    const bool atWorkbench = GetWorkbench(player) != nullptr;
+    if (firstPersonAfterBench && (firstPerson || !atWorkbench)) {
+        firstPersonAfterBench = false;
+        if (!firstPerson) {
+            SKSE::GetTaskInterface()->AddTask([] {
+                auto* camera = RE::PlayerCamera::GetSingleton();
+                if (camera->currentState && camera->currentState->id == RE::CameraState::kThirdPerson) {
+                    camera->ForceFirstPerson();
+                }
+            });
+        }
+    }
+
+    if (!cacheFrozen && (firstPerson || !atWorkbench)) {
         cachedFirstPerson = firstPerson;
     }
 }
@@ -699,11 +845,20 @@ void MenuCamera::Start(std::string_view menuName)
     const bool sitting = inFurniture && !lying;
     const bool settled = sitSleep == RE::SIT_SLEEP_STATE::kNormal || sitSleep == RE::SIT_SLEEP_STATE::kIsSitting || sitSleep == RE::SIT_SLEEP_STATE::kIsSleeping;
     const bool allowed = settled && (!lying || Settings::CanLieDown());
-    // the furniture and free cameras aren't the player's own, so switching either to third person would break it
-    const bool ownCamera = camera->IsInFreeCameraMode() || camera->currentState->id == RE::CameraState::kFurniture;
+    // the furniture and free cameras aren't the player's own, so switching either to third person would break it. a crafting menu keeps the
+    // furniture camera, with FUCK over it (furnitureBase)
+    const bool crafting = menuName == RE::CraftingMenu::MENU_NAME;
+    const bool atFurnitureCamera = camera->currentState->id == RE::CameraState::kFurniture;
+    const bool ownCamera = camera->IsInFreeCameraMode() || (atFurnitureCamera && !crafting);
     if (!allowed || ownCamera) {
         return;
     }
+    furnitureBase = atFurnitureCamera;
+
+    // at a workbench (see BenchView)
+    const auto bench = crafting && !furnitureBase && camera->cameraRoot ? std::optional{ GetBenchView(player, camera) } : std::nullopt;
+    benchPlaced = bench && bench->shot;
+    framingAcross = bench && bench->ownCamera ? BENCH_ACROSS : 0.5f;
 
     playerAngleX = player->GetAngleX();
     playerAngleZ = player->GetAngleZ();
@@ -731,7 +886,7 @@ void MenuCamera::Start(std::string_view menuName)
 
     // nothing's hidden round a merchant, whose counter is part of the view, nor whoever's pickpocketed, as the player's crept up to them
     // where they can be seen
-    keepObstructions = merchantShown || shownVictim;
+    keepObstructions = merchantShown || shownVictim || crafting;
 
     // the one shown faces the camera, so their head would turn round to look where it looks
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
@@ -776,7 +931,7 @@ void MenuCamera::Start(std::string_view menuName)
     }
 
     // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it
-    if (camera->currentState->id < RE::CameraState::kThirdPerson) {
+    if (!furnitureBase && camera->currentState->id < RE::CameraState::kThirdPerson) {
         camera->SetState(camera->cameraStates[RE::CameraState::kThirdPerson].get());
         camera->Update();
     }
@@ -856,8 +1011,8 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    const bool turnCharacter = !shownMerchant && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
-    const bool cameraToFront = !shownMerchant && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
+    const bool turnCharacter = !shownMerchant && !crafting && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool cameraToFront = !shownMerchant && !crafting && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
     // game's. otherwise the view carries on from the game's camera
@@ -867,7 +1022,7 @@ void MenuCamera::Start(std::string_view menuName)
     // as the merchant's is. straight ahead stays FUCK's own front view. not lying down or on a dragon, whose views FUCK places itself
     const bool flying = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
     bool frontCorner = false;
-    if (const auto chest = cameraToFront && !lying && !flying ? ChestOf(subject) : std::nullopt) {
+    if (const auto chest = cameraToFront && !lying && !flying && !furnitureBase ? ChestOf(subject) : std::nullopt) {
         auto* cameraRoot = camera->cameraRoot.get();
         const RE::NiPoint3 eye = cameraRoot ? cameraRoot->world.translate : player->GetPosition();
         const float facing = subject->GetAngleZ();
@@ -892,6 +1047,9 @@ void MenuCamera::Start(std::string_view menuName)
     if (shownVictim) {
         AimAtMark(shownVictim, player, camera);
     }
+    if (bench) {
+        PlaceBenchCamera(player, camera, *bench);
+    }
     if (moving && horse) {
         MoveCameraBehindMount(horse.get(), subject, camera);
     }
@@ -905,7 +1063,7 @@ void MenuCamera::Start(std::string_view menuName)
     // FUCK's camera goes on last, once the camera above is ready. resumable, so another plugin's camera pauses it rather than ending it
     FUCK::CameraSessionOptions options;
     options.client = this;
-    options.base = FUCK::CameraBase::kThirdPerson;
+    options.base = furnitureBase ? FUCK::CameraBase::kOffset : FUCK::CameraBase::kThirdPerson;
     options.subject = shownOther;
     // pickpocketing, the player's framed beside the mark
     if (shownVictim) {
@@ -916,22 +1074,22 @@ void MenuCamera::Start(std::string_view menuName)
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
-    if (cameraToFront && !frontCorner) {
+    if (cameraToFront && !frontCorner && !furnitureBase) {
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
-    if (freshBase && !frontCorner) {
+    if (freshBase && !frontCorner && !furnitureBase) {
         options.flags |= FUCK::CameraSessionFlags::kFreshBase;
     }
 
     // no turning from behind, on a seat, in a bed, on a horse, holding someone, or a merchant, where it would look wrong
-    if (fromBehind || seated || riding || holding || shownMerchant) {
+    if (fromBehind || seated || riding || holding || shownMerchant || crafting) {
         options.flags |= FUCK::CameraSessionFlags::kNoTurning;
     }
 
     // opens where the camera was left last time, otherwise from the default framing. not on the move, as that view is from behind and the
     // remembered one is from the front, nor in containers, on a horse, seated, or in a conversation, as a remembered angle wouldn't suit the
     // spot, nor for Apparel Preview, which frames the whole body
-    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && !shownMerchant && !previewShowsPlayer &&
+    if (Settings::values.rememberCamera && !moving && !mounted && !seated && !talking && !shownMerchant && !previewShowsPlayer && !crafting &&
         menuName != RE::ContainerMenu::MENU_NAME) {
         options.flags |= FUCK::CameraSessionFlags::kRememberCamera;
 
@@ -943,10 +1101,10 @@ void MenuCamera::Start(std::string_view menuName)
 
 
     // the obstruction hiding goes by the same part of the body. not on a dragon, whose framing already shows the rider with some of it.
-    // a merchant always, as across a counter they're seen from the chest up, and never the player shown for Apparel Preview, so the
-    // piece is seen whole
+    // a merchant always, as across a counter they're seen from the chest up, and a desk's alchemy lab or enchanter. never the player shown
+    // for Apparel Preview, so the piece is seen whole, nor at other benches
     const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
-    upperBody = shownMerchant || (Settings::values.upperBody && !onDragon && !previewShowsPlayer);
+    upperBody = shownMerchant || (bench && bench->desk) || (Settings::values.upperBody && !onDragon && !previewShowsPlayer && !crafting);
     if (upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
     }
@@ -959,11 +1117,18 @@ void MenuCamera::Start(std::string_view menuName)
     if (holding) {
         options.framingMargin = HOLDING_MARGIN;
     }
-    options.startFramed = true;
-    options.framingRect = GetFraming(GetListEdge());
+    if (bench && bench->desk) {
+        options.framingMargin = CLOSE_WORK_MARGIN;
+    }
+    framingMargin = options.framingMargin;
+    options.startFramed = !bench;
+    options.framingRect = GetFraming(GetListEdge(), framingAcross);
 
     if (!FUCK::BeginCameraSession(options)) {
         logger::warn("[MenuCamera] FUCK's camera wouldn't start.");
+    }
+    if (bench && !bench->shot) {
+        FUCK::SetCameraBodyFraming(this, true, options.framingRect, options.framingMargin);
     }
 
     active = true;
@@ -998,10 +1163,18 @@ void MenuCamera::Stop()
         disabledControls.reset();
     }
 
-    // not between the merchant and the player on a restart, which goes straight back to third person
-    if (cachedFirstPerson && !restarting) {
-        camera->ForceFirstPerson();
+    // not between the merchant and the player on a restart, which goes straight back to third person, nor from the furniture camera,
+    // which was never left
+    if (cachedFirstPerson && !restarting && !furnitureBase) {
+        // at a workbench, once the player's left it (see OnPerspectiveUpdate), as switching while they get up breaks Improved Camera
+        if (GetWorkbench(player)) {
+            firstPersonAfterBench = true;
+        } else {
+            camera->ForceFirstPerson();
+        }
     }
+    furnitureBase = false;
+    benchPlaced = false;
     if (!restarting) {
         previewShowsPlayer = false;
         previewOffFor = 0.0f;
@@ -1111,6 +1284,7 @@ void MenuCamera::Update(float interval)
 
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
+
 
     // once the camera is placed, so it's what this frame sees from. a hidden player is hidden again after, in case anything shows them
     if (!keepObstructions) {
@@ -1367,7 +1541,9 @@ void MenuCamera::ResetCamera()
     }
 
     FUCK::ResetCamera(this);
-    FUCK::SetCameraBodyFraming(this, true, GetFraming(GetListEdge()));
+    if (!benchPlaced) {
+        FUCK::SetCameraBodyFraming(this, true, GetFraming(GetListEdge(), framingAcross), framingMargin);
+    }
 }
 
 void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)

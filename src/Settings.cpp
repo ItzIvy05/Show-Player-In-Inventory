@@ -65,7 +65,8 @@ namespace Settings
     {
         if (menuName == RE::InventoryMenu::MENU_NAME ||
             menuName == RE::MagicMenu::MENU_NAME     ||
-            menuName == RE::BarterMenu::MENU_NAME)   {
+            menuName == RE::BarterMenu::MENU_NAME    ||
+            menuName == RE::CraftingMenu::MENU_NAME) {
             return true;
         }
 
