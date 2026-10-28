@@ -1,4 +1,5 @@
 #include "MenuCamera.h"
+#include "ItemDisplay.h"
 #include "Obstructions.h"
 #include "SettingsUI.h"
 
@@ -679,6 +680,7 @@ namespace
         static void AdvanceMovie(T* a_this, float a_interval, std::uint32_t a_currentTime)
         {
             _AdvanceMovie(a_this, a_interval, a_currentTime);
+            ItemDisplay::Update(a_this->uiMovie.get());
             MenuCamera::GetSingleton()->Update(a_interval);
         }
 
@@ -700,7 +702,8 @@ namespace
         {
             auto* object = a_entry ? a_entry->GetObject() : nullptr;
             auto* camera = MenuCamera::GetSingleton();
-            if (!object || (Settings::values.hideItemPreviews && camera->IsActive()) || camera->IsPreviewShowingPlayer()) {
+            if (!object || (Settings::values.hideItemPreviews && camera->IsActive()) ||
+                (Settings::values.hideApparelPreviewItems && camera->IsPreviewShowingPlayer())) {
                 a_this->UnloadInventoryItem();
                 return;
             }
@@ -753,6 +756,7 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::BarterMenu>::Install();
     AdvanceMovieHook<RE::ContainerMenu>::Install();
     AdvanceMovieHook<RE::CraftingMenu>::Install();
+    AdvanceMovieHook<RE::GiftMenu>::Install();
     EquipNotifyHook::Install();
     ApplyItemPreviews();
     if (HasApparelPreview()) {
@@ -1177,8 +1181,9 @@ void MenuCamera::Stop()
     benchPlaced = false;
     if (!restarting) {
         previewShowsPlayer = false;
-        previewOffFor = 0.0f;
-        moreHUDHidden = false;
+        previewOffFor      = 0.0f;
+        cardHidden         = false;
+        moreHUDHidden      = false;
     }
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
@@ -1359,7 +1364,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        if (auto* models = RE::Inventory3DManager::GetSingleton()) {
+        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && Settings::values.hideApparelPreviewItems) {
             models->UnloadInventoryItem();
         }
         HideItemCards(true);
@@ -1381,19 +1386,44 @@ bool MenuCamera::FollowApparelPreview(float interval)
     return false;
 }
 
-// the item cards out of the way of the piece being previewed. the menu's own fade is used, so the next row highlighted brings it back
+// the item cards out of the way of the piece being previewed: faded out with the menu's own fade, which the next row highlighted brings
+// back, and what holds the card hidden too, so that fade can't show it for a frame
 void MenuCamera::HideItemCards(bool hide)
 {
+    if (hide && !Settings::values.hideApparelPreviewItems) {
+        hide = false;
+    }
+
     const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
     if (!view) {
+        cardHidden = false;
         moreHUDHidden = false;
         return;
     }
 
+    const auto setVisible = [hide](RE::GFxValue& clip, bool& hidden) {
+        RE::GFxValue::DisplayInfo info;
+        clip.GetDisplayInfo(&info);
+        if (hide && info.GetVisible()) {
+            info.SetVisible(false);
+            clip.SetDisplayInfo(info);
+            hidden = true;
+        } else if (!hide && hidden) {
+            info.SetVisible(true);
+            clip.SetDisplayInfo(info);
+            hidden = false;
+        }
+    };
+
     RE::GFxValue card;
-    const bool found = (view->GetVariable(&card, "_root.Menu_mc.itemCard") && card.IsDisplayObject()) ||
-                       (view->GetVariable(&card, "_root.Menu_mc.ItemCard_mc") && card.IsDisplayObject());
-    if (found && hide) {
+    RE::GFxValue holder;
+    if (view->GetVariable(&card, "_root.Menu_mc.itemCard") && card.IsDisplayObject() && card.GetMember("_parent", &holder) &&
+        holder.IsDisplayObject()) {
+        setVisible(holder, cardHidden);
+    } else if (view->GetVariable(&card, "_root.Menu_mc.ItemCard_mc") && card.IsDisplayObject()) {
+        setVisible(card, cardHidden);
+    }
+    if (hide && card.IsDisplayObject()) {
         card.Invoke("FadeOutCard");
         RE::GFxValue faded{ false };
         view->SetVariable("_root.Menu_mc._bItemCardFadedIn", faded, RE::GFxMovie::SetVarType::kNormal);
@@ -1401,17 +1431,7 @@ void MenuCamera::HideItemCards(bool hide)
 
     RE::GFxValue moreHUD;
     if (view->GetVariable(&moreHUD, "_root.AHZItemCardContainer") && moreHUD.IsDisplayObject()) {
-        RE::GFxValue::DisplayInfo info;
-        moreHUD.GetDisplayInfo(&info);
-        if (hide && info.GetVisible()) {
-            info.SetVisible(false);
-            moreHUD.SetDisplayInfo(info);
-            moreHUDHidden = true;
-        } else if (!hide && moreHUDHidden) {
-            info.SetVisible(true);
-            moreHUD.SetDisplayInfo(info);
-            moreHUDHidden = false;
-        }
+        setVisible(moreHUD, moreHUDHidden);
     }
 }
 

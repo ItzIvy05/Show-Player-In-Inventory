@@ -234,6 +234,28 @@ namespace
         }
     };
 
+    // live in any item menu open underneath. whole numbers: pixels, and the size as a percentage
+    void ItemSliders(const char* id, float& x, float& y, float& scale, const char* help)
+    {
+        constexpr float ACROSS = 1000.0f;
+        constexpr float UP = 500.0f;
+        constexpr float LARGEST = 2.0f;
+        constexpr float PERCENT = 100.0f;
+
+        FUCK::PushID(id);
+        bool changed = false;
+        changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &x, -ACROSS, ACROSS, "%.0f");
+        FUCK::SetTooltip(help);
+        changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &y, -UP, UP, "%.0f");
+        FUCK::SetTooltip(help);
+        changed |= FUCK::ScaledSliderFloat("$SPII_SliderScale"_T, &scale, 0.0f, LARGEST, PERCENT);
+        FUCK::SetTooltip(help);
+        FUCK::PopID();
+        if (changed) {
+            Settings::Save();
+        }
+    }
+
     void BeginSection(const char* title)
     {
         FUCK::SeparatorText(title);
@@ -308,6 +330,19 @@ namespace
             }
             EndSection();
 
+            BeginSection("$SPII_Items"_T);
+            if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
+                ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+            }
+            if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
+                ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
+            }
+            static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
+            if (apparelPreview) {
+                Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideApparelPreviewItems, "$SPII_HideApparelPreviewItemsTT"_T);
+            }
+            EndSection();
+
             FUCK::TableNextColumn();
             BeginSection("$SPII_Adjust"_T);
             if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
@@ -318,28 +353,26 @@ namespace
             }
             EndSection();
 
+            BeginSection("$SPII_ResetSection"_T);
+            FUCK::BeginDisabled(!camera->HasCamera());
+            if (FUCK::Button("$SPII_ResetCamera"_T)) {
+                camera->ResetCamera();
+            }
+            FUCK::EndDisabled();
+            FUCK::SetTooltip("$SPII_ResetCameraTT"_T);
+
+            FUCK::SameLine();
+            if (FUCK::Button("$SPII_ResetDefaults"_T)) {
+                Settings::SetDefaults();
+                Settings::Save();
+                EventProcessor::GetSingleton()->ApplyLiveSettings();
+                MenuCamera::GetSingleton()->ApplyAnimation();
+            }
+            FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
+            EndSection();
+
             FUCK::EndTable();
         }
-
-        FUCK::Spacing();
-        FUCK::Separator();
-        FUCK::Spacing();
-
-        FUCK::BeginDisabled(!camera->HasCamera());
-        if (FUCK::Button("$SPII_ResetCamera"_T)) {
-            camera->ResetCamera();
-        }
-        FUCK::EndDisabled();
-        FUCK::SetTooltip("$SPII_ResetCameraTT"_T);
-
-        FUCK::SameLine();
-        if (FUCK::Button("$SPII_ResetDefaults"_T)) {
-            Settings::SetDefaults();
-            Settings::Save();
-            EventProcessor::GetSingleton()->ApplyLiveSettings();
-            MenuCamera::GetSingleton()->ApplyAnimation();
-        }
-        FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
     }
 }
 

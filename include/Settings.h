@@ -16,6 +16,28 @@ namespace Settings
         bool upperBody        = false;
         bool cameraControls   = true;
         bool tutorialSeen     = false;
+
+        // the item card and 3D item preview, in the movie's pixels (positive right and up) and as a scale, 0 and 1 leaving them as they are
+        float itemCardX        = 0.0f;
+        float itemCardY        = 0.0f;
+        float itemCardScale    = 1.0f;
+        float itemPreviewX     = 0.0f;
+        float itemPreviewY     = 0.0f;
+        float itemPreviewScale = 1.0f;
+
+        // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
+        bool hideApparelPreviewItems = true;
+
+        // the item menus' card spot and rotation area as last laid out, on a screen of this shape, for a bench opened before any item menu
+        float spotAspect     = 0.0f;
+        float cardSpotX      = 0.0f;
+        float cardSpotTop    = 0.0f;
+        float cardSpotWidth  = 0.0f;
+        float areaSpotX      = 0.0f;
+        float areaSpotY      = 0.0f;
+        float areaSpotWidth  = 0.0f;
+        float areaSpotHeight = 0.0f;
+
         int version = 0;  // the settings' version, see VERSION in Settings.cpp
     };
 

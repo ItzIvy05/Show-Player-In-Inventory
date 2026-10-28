@@ -19,6 +19,21 @@ namespace
         { "bUpperBody",        &Settings::Values::upperBody },
         { "bCameraControls",   &Settings::Values::cameraControls },
         { "bTutorialSeen",     &Settings::Values::tutorialSeen },
+        { "fItemCardX",        &Settings::Values::itemCardX },
+        { "fItemCardY",        &Settings::Values::itemCardY },
+        { "fItemCardScale",    &Settings::Values::itemCardScale },
+        { "fItemPreviewX",     &Settings::Values::itemPreviewX },
+        { "fItemPreviewY",     &Settings::Values::itemPreviewY },
+        { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
+        { "bHideAppPrevItems", &Settings::Values::hideApparelPreviewItems },
+        { "fSpotAspect",       &Settings::Values::spotAspect },
+        { "fCardSpotX",        &Settings::Values::cardSpotX },
+        { "fCardSpotTop",      &Settings::Values::cardSpotTop },
+        { "fCardSpotWidth",    &Settings::Values::cardSpotWidth },
+        { "fAreaSpotX",        &Settings::Values::areaSpotX },
+        { "fAreaSpotY",        &Settings::Values::areaSpotY },
+        { "fAreaSpotWidth",    &Settings::Values::areaSpotWidth },
+        { "fAreaSpotHeight",   &Settings::Values::areaSpotHeight },
         { "iVersion",          &Settings::Values::version },
     } };
 
@@ -33,11 +48,19 @@ namespace Settings
 {
     void SetDefaults()
     {
-        // the tutorial has been seen either way, and the version stays
-        const bool seen = values.tutorialSeen;
+        // the tutorial has been seen either way, and the version, and the item menus' spots stay
+        const Values kept = values;
         values = {};
-        values.tutorialSeen = seen;
-        values.version = VERSION;
+        values.version        = VERSION;
+        values.tutorialSeen   = kept.tutorialSeen;
+        values.spotAspect     = kept.spotAspect;
+        values.cardSpotX      = kept.cardSpotX;
+        values.cardSpotTop    = kept.cardSpotTop;
+        values.cardSpotWidth  = kept.cardSpotWidth;
+        values.areaSpotX      = kept.areaSpotX;
+        values.areaSpotY      = kept.areaSpotY;
+        values.areaSpotWidth  = kept.areaSpotWidth;
+        values.areaSpotHeight = kept.areaSpotHeight;
     }
 
     // settings from an older version are cleared

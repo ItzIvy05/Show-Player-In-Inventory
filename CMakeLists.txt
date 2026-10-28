@@ -31,6 +31,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in" "${CMAKE_CURREN
 set(IVY_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EventProcessor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ItemDisplay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/MenuCamera.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Obstructions.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Settings.cpp"
@@ -41,6 +42,7 @@ set(IVY_SOURCES
 
 set(IVY_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EventProcessor.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/ItemDisplay.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/MenuCamera.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Obstructions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/PCH.h"
