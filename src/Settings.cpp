@@ -63,7 +63,9 @@ namespace Settings
 
     bool IsWatchedMenu(std::string_view menuName)
     {
-        if (menuName == RE::InventoryMenu::MENU_NAME || menuName == RE::MagicMenu::MENU_NAME || menuName == RE::BarterMenu::MENU_NAME) {
+        if (menuName == RE::InventoryMenu::MENU_NAME ||
+            menuName == RE::MagicMenu::MENU_NAME     ||
+            menuName == RE::BarterMenu::MENU_NAME)   {
             return true;
         }
 

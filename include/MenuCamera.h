@@ -10,15 +10,16 @@ class MenuCamera : public REX::Singleton<MenuCamera>, public FUCK::ICameraClient
 public:
     static void InstallHooks();
 
-    void Start(std::string_view menuName);
-    void Stop();
-    void Update(float interval);
-    void ResetCamera();
-    void ApplyAnimation();
+    void        Start(std::string_view menuName);
+    void        Stop();
+    void        Update(float interval);
+    void        ResetCamera();
+    void        ApplyAnimation();
     static void ApplyItemPreviews();
-    bool DrawPositionSliders();
-    void OnPerspectiveUpdate(bool firstPerson);
-    void SetCacheFrozen(bool frozen);
+    bool        DrawPositionSliders();
+    void        OnPerspectiveUpdate(bool firstPerson);
+    void        SetCacheFrozen(bool frozen);
+    
     [[nodiscard]] bool IsActive() const;
     [[nodiscard]] bool HasCamera();
     [[nodiscard]] bool IsPreviewShowingPlayer() const { return previewShowsPlayer; }
@@ -39,6 +40,7 @@ private:
     void Restart();
     void HidePlayer();
     void ShowPlayer();
+    
     [[nodiscard]] bool IsAnimatedHere(RE::Actor* actor) const;
     [[nodiscard]] std::vector<RE::Actor*> GetShown() const;
 
@@ -46,7 +48,7 @@ private:
 
     float playerAngleX = 0.0f;
     float playerAngleZ = 0.0f;
-    bool pitchLevelled = false;  // the player's look was levelled, to put back
+
     bool upperBody     = false;  // framed from the chest up
     bool merchantShown = false;  // a merchant in barter, whose counter and face are left alone
     bool hidingPlayer  = false;  // the player's kept hidden, from in front of a merchant or whoever's pickpocketed
@@ -54,16 +56,17 @@ private:
 
     // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them
     std::string shownMenu;
-    bool previewShowsPlayer = false;
-    float previewOffFor     = 0.0f;
-    bool restarting         = false;
-    bool moreHUDHidden      = false;  // moreHUD's item card hidden for it, to show again
+    
+    bool  previewShowsPlayer = false;
+    float previewOffFor      = 0.0f;
+    bool  restarting         = false;
+    bool  moreHUDHidden      = false;  // moreHUD's item card hidden for it, to show again
 
     // the darkness round the menu while sneaking unseen
-    bool shadeAllowed  = false;  // not in barter or a follower's inventory, where it's no secret
-    bool unseen        = false;
-    float shade        = 0.0f;  // 0 to 1, easing towards whether they're unseen
-    float shadeCheckIn = 0.0f;  // seconds until detection is checked again
+    bool  shadeAllowed = false;  // not in barter or a follower's inventory, where it's no secret
+    bool  unseen       = false;
+    float shade        = 0.0f;   // 0 to 1, easing towards whether they're unseen
+    float shadeCheckIn = 0.0f;   // seconds until detection is checked again
 
     // a follower shown in the player's place, and how they faced, to put back
     RE::ActorHandle follower;

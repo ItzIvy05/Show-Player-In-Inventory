@@ -49,7 +49,9 @@ namespace
     bool IsPromptOpen()
     {
         auto* ui = RE::UI::GetSingleton();
-        return ui->IsMenuOpen(RE::MessageBoxMenu::MENU_NAME) || ui->IsMenuOpen(RE::InterfaceStrings::GetSingleton()->quantityMenu) || ui->IsMenuOpen(RE::BookMenu::MENU_NAME);
+        return ui->IsMenuOpen(RE::MessageBoxMenu::MENU_NAME)                      ||
+               ui->IsMenuOpen(RE::InterfaceStrings::GetSingleton()->quantityMenu) ||
+               ui->IsMenuOpen(RE::BookMenu::MENU_NAME)                            ;
     }
 
     template <class T>
@@ -142,7 +144,10 @@ namespace
     bool IsCursorOverList()
     {
         auto* ui = RE::UI::GetSingleton();
-        return IsCursorOverList<RE::InventoryMenu>(ui) || IsCursorOverList<RE::MagicMenu>(ui) || IsCursorOverList<RE::BarterMenu>(ui) || IsCursorOverList<RE::ContainerMenu>(ui);
+        return IsCursorOverList<RE::InventoryMenu>(ui) ||
+               IsCursorOverList<RE::MagicMenu>(ui)     ||
+               IsCursorOverList<RE::BarterMenu>(ui)    ||
+               IsCursorOverList<RE::ContainerMenu>(ui) ;
     }
 
     // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
@@ -633,13 +638,14 @@ void MenuCamera::Start(std::string_view menuName)
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
     auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
-    // the one shown faces the camera, so their head would turn round to look where it looks
     // the player out of the way of a merchant or whoever's being robbed, as they stand right in front
     merchantShown = shownMerchant != nullptr;
     hidingPlayer = merchantShown || shownVictim;
     if (hidingPlayer) {
         HidePlayer();
     }
+
+    // the one shown faces the camera, so their head would turn round to look where it looks
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
     HoldHeadStill(subject);
     // the player's face eases to neutral and goes back after. anyone else's is settled in a paused menu, along with anyone held or talked
