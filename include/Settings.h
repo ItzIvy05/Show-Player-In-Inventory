@@ -5,17 +5,16 @@ namespace Settings
     //default setting values
     struct Values
     {
-        bool enabled          = true;
-        bool hideItemPreviews = false;
-        bool animateCharacter = true;
-        bool turnCharacter    = false;
-        bool rememberCamera   = false;
-        bool rememberFacing   = false;
-        bool hideObstructions = true;
-        bool sneakVignette    = true;
-        bool upperBody        = false;
-        bool cameraControls   = true;
-        bool tutorialSeen     = false;
+        bool enabled           = true;
+        bool animateCharacter  = true;
+        bool turnCharacter     = false;
+        bool rememberCamera    = false;
+        bool rememberFacing    = false;
+        bool hideObstructions  = true;
+        bool sneakVignette     = true;
+        bool upperBody         = false;
+        bool cameraControls    = true;
+        bool tutorialSeen      = false;
 
         // the item card and 3D item preview, in the movie's pixels (positive right and up) and as a scale, 0 and 1 leaving them as they are
         float itemCardX        = 0.0f;
@@ -25,21 +24,21 @@ namespace Settings
         float itemPreviewY     = 0.0f;
         float itemPreviewScale = 1.0f;
 
-        // on a screen wider than 16:9, how much of the extra width the player's moved right into, away from the item list
-        float wideScreenShift  = 0.7f;
+        // how much the player's moved horizontally, away from the item list
+        float frameShift       = 0.0f;
 
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
-        bool hideApparelPreviewItems = true;
+        bool hideAppPrevItems  = false;
 
         // the item menus' card spot and rotation area as last laid out, on a screen of this shape, for a bench opened before any item menu
-        float spotAspect     = 0.0f;
-        float cardSpotX      = 0.0f;
-        float cardSpotTop    = 0.0f;
-        float cardSpotWidth  = 0.0f;
-        float areaSpotX      = 0.0f;
-        float areaSpotY      = 0.0f;
-        float areaSpotWidth  = 0.0f;
-        float areaSpotHeight = 0.0f;
+        float spotAspect       = 0.0f;
+        float cardSpotX        = 0.0f;
+        float cardSpotTop      = 0.0f;
+        float cardSpotWidth    = 0.0f;
+        float areaSpotX        = 0.0f;
+        float areaSpotY        = 0.0f;
+        float areaSpotWidth    = 0.0f;
+        float areaSpotHeight   = 0.0f;
 
         int version = 0;  // the settings' version, see VERSION in Settings.cpp
     };

@@ -141,20 +141,14 @@ namespace
             .value_or(DEFAULT_LIST_EDGE);
     }
 
-    // on a wider screen than 16:9, how far right the player's moved into the extra width, in half the screen's height
-    float GetWideShift(float aspect)
+    // how far right or left the player is moved from the default framing
+    float GetFrameShift()
     {
-        return Settings::values.wideScreenShift * std::max(aspect - NORMAL_ASPECT, 0.0f);
-    }
-
-    float GetWideShift()
-    {
-        const ImVec2 display = FUCK::GetDisplaySize();
-        return display.y > 0.0f ? GetWideShift(display.x / display.y) : 0.0f;
+        return Settings::values.frameShift;
     }
 
     // the body framed between the item list's edge and the screen's right edge (FRAMING_ACROSS, or BENCH_ACROSS at a bench), where it
-    // is at 16:9, the same distance from the screen's middle on a wider screen plus the wide screen shift, so the player can sit more
+    // is at 16:9, the same distance from the screen's middle on a wider screen plus the frame shift, so the player can sit more
     // in the wider space rather than by the list
     FUCK::CameraScreenRect GetFraming(float listEdge, bool bench = false)
     {
@@ -167,7 +161,7 @@ namespace
         // in half the screen's height from its middle, where the list keeps its width as the screen widens
         const float across = bench ? BENCH_ACROSS : FRAMING_ACROSS;
         const float list = listEdge * 2.0f * aspect;
-        const float x = list - NORMAL_ASPECT + across * (2.0f * NORMAL_ASPECT - list) + GetWideShift(aspect);
+        const float x = list - NORMAL_ASPECT + across * (2.0f * NORMAL_ASPECT - list) + GetFrameShift();
         return { x / aspect, MIDDLE_Y, HALF_HEIGHT };
     }
 
@@ -511,7 +505,7 @@ namespace
         return view;
     }
 
-    // a hand-set view returns how far the wide screen shift slides it per unit, in game units, to move it by later. 0 for the others
+    // a hand-set view returns how far the frame shift slides it per unit, in game units, to move it by later. 0 for the others
     float PlaceBenchCamera(RE::PlayerCharacter* player, RE::PlayerCamera* camera, const BenchView& view)
     {
         auto* root = camera->cameraRoot.get();
@@ -528,7 +522,7 @@ namespace
             const RE::NiPoint3 eye = *chest + right * shot->right + ahead * shot->forward + RE::NiPoint3{ 0.0f, 0.0f, shot->up };
             PlaceCamera(camera, eye, facing + shot->round * RADIANS, shot->down * RADIANS);
 
-            // on a wider screen, slid left by the wide screen shift, as framed views are. the shift is in half the screen's height, so
+            // slid left or right by the frame shift, as framed views are. the shift is in half the screen's height, so
             // it's that much of the view's height where the chest is
             auto* worldCamera = RE::Main::WorldRootCamera();
             const float tanHalfHeight = worldCamera ? worldCamera->GetRuntimeData2().viewFrustum.fTop : 0.0f;
@@ -540,7 +534,7 @@ namespace
                 return 0.0f;
             }
             const float perShift = depth * tanHalfHeight;
-            if (const float shift = GetWideShift(); shift > 0.0f) {
+            if (const float shift = GetFrameShift(); shift != 0.0f) {
                 root->local.translate -= across * (shift * perShift);
                 RE::NiUpdateData data{};
                 root->Update(data);
@@ -745,8 +739,7 @@ namespace
         {
             auto* object = a_entry ? a_entry->GetObject() : nullptr;
             auto* camera = MenuCamera::GetSingleton();
-            if (!object || (Settings::values.hideItemPreviews && camera->IsActive()) ||
-                (Settings::values.hideApparelPreviewItems && camera->IsPreviewShowingPlayer())) {
+            if (!object || (Settings::values.hideAppPrevItems && camera->IsPreviewShowingPlayer())) {
                 a_this->UnloadInventoryItem();
                 return;
             }
@@ -801,25 +794,11 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::CraftingMenu>::Install();
     AdvanceMovieHook<RE::GiftMenu>::Install();
     EquipNotifyHook::Install();
-    ApplyItemPreviews();
     if (HasApparelPreview()) {
         LoadInventoryItemHook::Install();
     }
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
-}
-
-// clears a preview already showing. turned off, previews return from the next item selected
-void MenuCamera::ApplyItemPreviews()
-{
-    if (!Settings::values.hideItemPreviews) {
-        return;
-    }
-
-    LoadInventoryItemHook::Install();
-    if (GetSingleton()->IsActive()) {
-        RE::Inventory3DManager::GetSingleton()->UnloadInventoryItem();
-    }
 }
 
 void MenuCamera::SetCacheFrozen(bool frozen)
@@ -1096,7 +1075,7 @@ void MenuCamera::Start(std::string_view menuName)
     }
     if (bench) {
         benchShiftScale = PlaceBenchCamera(player, camera, *bench);
-        benchShiftPlaced = GetWideShift();
+        benchShiftPlaced = GetFrameShift();
         benchShift = benchShiftPlaced;
     }
     if (moving && horse) {
@@ -1410,7 +1389,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && Settings::values.hideApparelPreviewItems) {
+        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && Settings::values.hideAppPrevItems) {
             models->UnloadInventoryItem();
         }
         HideItemCards(true);
@@ -1436,7 +1415,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
 // back, and what holds the card hidden too, so that fade can't show it for a frame
 void MenuCamera::HideItemCards(bool hide)
 {
-    if (hide && !Settings::values.hideApparelPreviewItems) {
+    if (hide && !Settings::values.hideAppPrevItems) {
         hide = false;
     }
 
@@ -1599,7 +1578,7 @@ void MenuCamera::SetFrozen(bool freeze)
     }
 }
 
-// the body framed afresh, after the wide screen shift changes. a hand-set bench view is slid across by the change instead, through
+// the body framed afresh, after the frame shift changes. a hand-set bench view is slid across by the change instead, through
 // FUCK's offsets, so any move of the user's is kept
 void MenuCamera::ApplyFraming()
 {
@@ -1613,7 +1592,7 @@ void MenuCamera::ApplyFraming()
         return;
     }
 
-    const float shift = GetWideShift();
+    const float shift = GetFrameShift();
     FUCK::CameraOffsets offsets;
     if (benchShiftScale > 0.0f && shift != benchShift && FUCK::GetCameraOffsets(this, offsets)) {
         offsets.translate.x -= (shift - benchShift) * benchShiftScale;
@@ -1635,7 +1614,7 @@ void MenuCamera::ResetCamera()
         return;
     }
 
-    // a hand-set bench view's back where it was placed, then slid by any change to the wide screen shift since
+    // a hand-set bench view's back where it was placed, then slid by any change to the frame shift since
     benchShift = benchShiftPlaced;
     ApplyFraming();
 }

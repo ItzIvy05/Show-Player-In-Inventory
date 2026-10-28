@@ -16,7 +16,6 @@ public:
     void        ResetCamera();
     void        ApplyFraming();
     void        ApplyAnimation();
-    static void ApplyItemPreviews();
     bool        DrawPositionSliders();
     void        OnPerspectiveUpdate(bool firstPerson);
     void        SetCacheFrozen(bool frozen);
@@ -58,7 +57,7 @@ private:
     bool  benchFraming     = false;  // framed as at a bench, nearer the list (see GetFraming)
     float framingMargin    = 0.0f;   // and the room round it, 0 for FUCK's
     bool  benchPlaced      = false;  // a bench camera set by hand, so not framed
-    float benchShiftScale  = 0.0f;   // and how far the wide screen shift slides it per unit, 0 when it can't
+    float benchShiftScale  = 0.0f;   // and how far the frame shift slides it per unit, 0 when it can't
     float benchShiftPlaced = 0.0f;   // the shift it was placed with
     float benchShift       = 0.0f;   // and the shift it's slid to since
     bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed

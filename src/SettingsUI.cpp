@@ -284,17 +284,20 @@ namespace
 
         FUCK::Spacing();
 
+        auto* camera = MenuCamera::GetSingleton();
         if (BeginCheckboxes("##Settings")) {
             FUCK::TableNextColumn();
             BeginSection("$SPII_General"_T);
             Checkbox("$SPII_HideObstructions"_T,     values.hideObstructions, "$SPII_HideObstructionsTT"_T);
             if (Checkbox("$SPII_Animate"_T,          values.animateCharacter, "$SPII_AnimateTT"_T)) {
-                MenuCamera::GetSingleton()->ApplyAnimation();
+                camera->ApplyAnimation();
             }
             Checkbox("$SPII_SneakVignette"_T,        values.sneakVignette,    "$SPII_SneakVignetteTT"_T);
-            if (Checkbox("$SPII_HideItemPreviews"_T, values.hideItemPreviews, "$SPII_HideItemPreviewsTT"_T)) {
-                MenuCamera::ApplyItemPreviews();
+            if (FUCK::SliderFloat("$SPII_FrameShift"_T, &values.frameShift, -20.0f, 20.0f, "%.1f")) {
+                Settings::Save();
+                camera->ApplyFraming();
             }
+            FUCK::SetTooltip("$SPII_FrameShiftTT"_T);
             EndSection();
 
             FUCK::TableNextColumn();
@@ -315,7 +318,6 @@ namespace
 
         FUCK::Spacing();
 
-        auto* camera = MenuCamera::GetSingleton();
         if (BeginCheckboxes("##Controls")) {
             FUCK::TableNextColumn();
             BeginSection("$SPII_Controls"_T);
@@ -331,26 +333,20 @@ namespace
             EndSection();
 
             BeginSection("$SPII_Items"_T);
-            if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
-                ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+            static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
+            if (apparelPreview) {
+                Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
             }
-            static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
-            if (apparelPreview) {
-                Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideApparelPreviewItems, "$SPII_HideApparelPreviewItemsTT"_T);
+            if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
+                ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
             }
             EndSection();
 
             FUCK::TableNextColumn();
             BeginSection("$SPII_Adjust"_T);
-            // 0 to 15, a tenth of the extra width each
-            if (FUCK::ScaledSliderFloat("$SPII_WideScreenShift"_T, &values.wideScreenShift, 0.0f, 1.5f, 10.0f)) {
-                Settings::Save();
-                camera->ApplyFraming();
-            }
-            FUCK::SetTooltip("$SPII_WideScreenShiftTT"_T);
             if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
                 FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
             }
@@ -372,8 +368,8 @@ namespace
                 Settings::SetDefaults();
                 Settings::Save();
                 EventProcessor::GetSingleton()->ApplyLiveSettings();
-                MenuCamera::GetSingleton()->ApplyAnimation();
-                MenuCamera::GetSingleton()->ApplyFraming();
+                camera->ApplyAnimation();
+                camera->ApplyFraming();
             }
             FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
             EndSection();

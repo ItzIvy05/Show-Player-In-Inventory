@@ -9,7 +9,6 @@ namespace
     // the settings and their ini keys. defaults come from Values, and only values that differ are written
     const FUCK::INI::Fields<Settings::Values> FIELDS{ SECTION, {
         { "bEnable",           &Settings::Values::enabled },
-        { "bHideItemPreviews", &Settings::Values::hideItemPreviews },
         { "bAnimateCharacter", &Settings::Values::animateCharacter },
         { "bTurnCharacter",    &Settings::Values::turnCharacter },
         { "bRememberCamera",   &Settings::Values::rememberCamera },
@@ -25,8 +24,8 @@ namespace
         { "fItemPreviewX",     &Settings::Values::itemPreviewX },
         { "fItemPreviewY",     &Settings::Values::itemPreviewY },
         { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
-        { "bHideAppPrevItems", &Settings::Values::hideApparelPreviewItems },
-        { "fWideScreenShift",  &Settings::Values::wideScreenShift },
+        { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
+        { "fFrameShift",       &Settings::Values::frameShift },
         { "fSpotAspect",       &Settings::Values::spotAspect },
         { "fCardSpotX",        &Settings::Values::cardSpotX },
         { "fCardSpotTop",      &Settings::Values::cardSpotTop },
