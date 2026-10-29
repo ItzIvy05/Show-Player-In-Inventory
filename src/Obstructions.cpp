@@ -207,45 +207,21 @@ namespace
     RE::TESObjectREFR* ToPointer(RE::TESObjectREFR* ref) { return ref; }
     RE::TESObjectREFR* ToPointer(RE::TESObjectREFR& ref) { return &ref; }
 
-    // every reference within a_radius of a_origin, in the interior or the loaded exterior cells. TES::ForEachReferenceInRange
-    // isn't used, as on AE it reads the sky cell through an uncertain offset and crashes outdoors (found by Menu Studio)
+    // every reference within radius of the origin reference, in the interior or the loaded exterior cells
     template <class Fn>
-    void ForEachRefInRange(const RE::NiPoint3& origin, float radius, Fn fn)
+    void ForEachRefInRange(RE::TESObjectREFR& origin, float radius, Fn fn)
     {
         auto* tes = RE::TES::GetSingleton();
         if (!tes) {
             return;
         }
 
-        auto visit = [&](auto&& entry) {
+        tes->ForEachReferenceInRange(&origin, radius, [&](auto&& entry) {
             if (auto* ref = ToPointer(entry)) {
                 fn(*ref);
             }
             return RE::BSContainer::ForEachResult::kContinue;
-        };
-
-        if (tes->interiorCell) {
-            tes->interiorCell->ForEachReferenceInRange(origin, radius, visit);
-            return;
-        }
-
-        auto* grid = tes->gridCells;
-        const std::uint32_t length = grid ? grid->length : 0;
-        for (std::uint32_t x = 0; x < length; ++x) {
-            for (std::uint32_t y = 0; y < length; ++y) {
-                auto* cell = grid->GetCell(x, y);
-                const auto* coords = cell && cell->IsAttached() ? cell->GetCoordinates() : nullptr;
-                if (!coords) {
-                    continue;
-                }
-
-                // only the cells the range reaches into, a cell is 4096 units square
-                if (coords->worldX < origin.x + radius && coords->worldX + 4096.0f > origin.x - radius &&
-                    coords->worldY < origin.y + radius && coords->worldY + 4096.0f > origin.y - radius) {
-                    cell->ForEachReferenceInRange(origin, radius, visit);
-                }
-            }
-        }
+        });
     }
 
     // ----- geometry -----
@@ -802,7 +778,7 @@ namespace
         };
 
         // what's near enough, and what a sight line hit, as a big mesh can stand further off
-        ForEachRefInRange(feet, view->eye.GetDistance(feet) + REACH_PAD, visit);
+        ForEachRefInRange(*subject, view->eye.GetDistance(feet) + REACH_PAD, visit);
         for (auto* ref : sight.all) {
             visit(*ref);
         }
