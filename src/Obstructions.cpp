@@ -52,7 +52,13 @@ namespace
         float clearFor = 0.0f;
     };
     std::vector<HiddenFlame> hiddenFlames;
-    std::unordered_map<const RE::NiAVObject*, std::vector<RE::NiPointer<RE::BSValueNode>>> flameSpots;  // by 3D, found once a showing
+
+    struct FlameCache
+    {
+        RE::NiPointer<RE::NiAVObject> root;
+        std::vector<RE::NiPointer<RE::BSValueNode>> spots;
+    };
+    std::unordered_map<RE::FormID, FlameCache> flameSpots;  // by FormID, updated if the 3D changes
 
     float sinceCheck = CHECK_INTERVAL;
 
@@ -670,13 +676,15 @@ namespace
         }
     }
 
-    const std::vector<RE::NiPointer<RE::BSValueNode>>& FlameSpotsOf(RE::NiAVObject& root)
+    const std::vector<RE::NiPointer<RE::BSValueNode>>& FlameSpotsOf(RE::TESObjectREFR& ref, RE::NiAVObject& root)
     {
-        auto [entry, added] = flameSpots.try_emplace(&root);
-        if (added) {
-            FindFlameSpots(&root, entry->second);
+        auto& entry = flameSpots[ref.GetFormID()];
+        if (entry.root.get() != &root) {
+            entry.root = RE::NiPointer<RE::NiAVObject>(&root);  // releases the old root
+            entry.spots.clear();
+            FindFlameSpots(&root, entry.spots);
         }
-        return entry->second;
+        return entry.spots;
     }
 
     bool HasLight(RE::NiAVObject* object)
@@ -783,7 +791,7 @@ namespace
                 pieces.push_back(std::move(*piece));
             }
 
-            for (const auto& spot : FlameSpotsOf(*root)) {
+            for (const auto& spot : FlameSpotsOf(ref, *root)) {
                 RE::NiAVObject* drawn = spot->associatedObject.get();
                 const float margin = wasHiddenFlame.contains(drawn) ? HOLD_MARGIN : 0.0f;
                 if (std::ranges::find(flames, drawn) == flames.end() &&
@@ -807,7 +815,7 @@ namespace
             if (!root) {
                 continue;
             }
-            for (const auto& spot : FlameSpotsOf(*root)) {
+            for (const auto& spot : FlameSpotsOf(*blocking[i], *root)) {
                 if (RE::NiAVObject* drawn = spot->associatedObject.get(); std::ranges::find(flames, drawn) == flames.end()) {
                     flames.push_back(drawn);
                 }
