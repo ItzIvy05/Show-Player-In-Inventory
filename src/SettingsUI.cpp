@@ -234,21 +234,38 @@ namespace
         }
     };
 
-    // live in any item menu open underneath. whole numbers: pixels, and the size as a percentage
+    // live in any item menu open underneath. whole numbers: the position dragged in the movie's pixels, over a whole screen either way,
+    // and the size as a percentage, from 1
     void ItemSliders(const char* id, float& x, float& y, float& scale, const char* help)
     {
-        constexpr float ACROSS = 1000.0f;
-        constexpr float UP = 500.0f;
-        constexpr float LARGEST = 2.0f;
-        constexpr float PERCENT = 100.0f;
+        constexpr float MOVIE_HEIGHT = 720.0f;  // the menus' height in the movie's pixels, its width going with the screen's shape
+        constexpr float WIDE_SCREEN  = 16.0f / 9.0f;
+        constexpr float DRAG_SPEED   = 1.0f;    // movie pixels for each pixel the mouse moves
+        constexpr float LARGEST      = 2.0f;
+        constexpr float PERCENT      = 100.0f;
+
+        // a whole screen's width and height either way, so wherever the card or preview starts, any spot on the screen can be reached
+        const ImVec2 screen = FUCK::GetDisplaySize();
+        const float aspect  = screen.y > 0.0f ? screen.x / screen.y : WIDE_SCREEN;
+        const float across  = MOVIE_HEIGHT * aspect;
+        const float up      = MOVIE_HEIGHT;
 
         FUCK::PushID(id);
         bool changed = false;
-        changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &x, -ACROSS, ACROSS, "%.0f");
+        if (FUCK::DragFloat("$SPII_SliderX"_T, &x, DRAG_SPEED, -across, across, "%.0f")) {
+            x = std::clamp(x, -across, across);  // a typed-in value isn't held to the range
+            changed = true;
+        }
         FUCK::SetTooltip(help);
-        changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &y, -UP, UP, "%.0f");
+        if (FUCK::DragFloat("$SPII_SliderZ"_T, &y, DRAG_SPEED, -up, up, "%.0f")) {
+            y = std::clamp(y, -up, up);
+            changed = true;
+        }
         FUCK::SetTooltip(help);
-        changed |= FUCK::ScaledSliderFloat("$SPII_SliderScale"_T, &scale, 0.0f, LARGEST, PERCENT);
+        if (FUCK::ScaledSliderFloat("$SPII_SliderScale"_T, &scale, Settings::MIN_ITEM_SCALE, LARGEST, PERCENT)) {
+            scale = std::max(scale, Settings::MIN_ITEM_SCALE);  // a typed-in value isn't held to the slider's range
+            changed = true;
+        }
         FUCK::SetTooltip(help);
         FUCK::PopID();
         if (changed) {
@@ -293,7 +310,11 @@ namespace
                 camera->ApplyAnimation();
             }
             Checkbox("$SPII_SneakVignette"_T,        values.sneakVignette,    "$SPII_SneakVignetteTT"_T);
-            if (FUCK::SliderFloat("$SPII_FrameShift"_T, &values.frameShift, -20.0f, 20.0f, "%.1f")) {
+            // dragged, in half the screen's height, either way up to 4 of them. a mouse pixel moves it about a pixel and a half at 1440p
+            constexpr float FRAME_SHIFT_RANGE = 4.0f;
+            constexpr float FRAME_SHIFT_SPEED = 0.002f;
+            if (FUCK::DragFloat("$SPII_FrameShift"_T, &values.frameShift, FRAME_SHIFT_SPEED, -FRAME_SHIFT_RANGE, FRAME_SHIFT_RANGE, "%.3f")) {
+                values.frameShift = std::clamp(values.frameShift, -FRAME_SHIFT_RANGE, FRAME_SHIFT_RANGE);
                 Settings::Save();
                 camera->ApplyFraming();
             }

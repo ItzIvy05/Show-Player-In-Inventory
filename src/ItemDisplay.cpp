@@ -126,6 +126,18 @@ namespace
         return true;
     }
 
+    // the sizes as used, never lower than the smallest: at nothing the card's clip is left unplaceable and the loaded models can't be
+    // sized back up, and a saved or typed-in zero would do the same
+    float CardScale()
+    {
+        return std::max(Settings::values.itemCardScale, Settings::MIN_ITEM_SCALE);
+    }
+
+    float PreviewScale()
+    {
+        return std::max(Settings::values.itemPreviewScale, Settings::MIN_ITEM_SCALE);
+    }
+
     bool IsCardSet()
     {
         const auto& values = Settings::values;
@@ -353,7 +365,7 @@ namespace
         const auto& values = Settings::values;
         float toX = card.baseX + values.itemCardX;
         float toY = card.baseY - values.itemCardY;
-        const float toScale = card.baseScale * values.itemCardScale;
+        const float toScale = card.baseScale * CardScale();
         if (IsCardSet()) {
             KeepOnScreen(view, clip, x, y, scale, toX, toY, toScale);
         }
@@ -403,8 +415,8 @@ namespace
         }
 
         const auto& values   = Settings::values;
-        const float toWidth  = area.baseWidth * values.itemPreviewScale;
-        const float toHeight = area.baseHeight * values.itemPreviewScale;
+        const float toWidth  = area.baseWidth * PreviewScale();
+        const float toHeight = area.baseHeight * PreviewScale();
         const float toX      = area.baseX + values.itemPreviewX - (toWidth - area.baseWidth) * 0.5f;
         const float toY      = area.baseY - values.itemPreviewY - (toHeight - area.baseHeight) * 0.5f;
         if (toX == x && toY == y && toWidth == width && toHeight == height) {
@@ -442,7 +454,7 @@ namespace
         const auto& values   = Settings::values;
         const float offsetX  = -values.itemPreviewX / PIXELS_PER_UNIT;
         const float offsetZ  = values.itemPreviewY / PIXELS_PER_UNIT;
-        const auto offsetFor = [&](Axis axis) { return axis == kX ? offsetX : axis == kZ ? offsetZ : values.itemPreviewScale; };
+        const auto offsetFor = [&](Axis axis) { return axis == kX ? offsetX : axis == kZ ? offsetZ : PreviewScale(); };
 
         auto* ini = RE::INISettingCollection::GetSingleton();
         for (auto& one : previewSettings) {
@@ -507,11 +519,11 @@ namespace
 
         changed |= Apply(manager->itemPos.x, managerValues[0], offsetX, false);
         changed |= Apply(manager->itemPos.z, managerValues[1], offsetZ, false);
-        changed |= Apply(manager->itemScale, managerValues[2], values.itemPreviewScale, true);
+        changed |= Apply(manager->itemScale, managerValues[2], PreviewScale(), true);
        
         Apply(manager->itemPosCopy.x, managerValues[3], offsetX, false);
         Apply(manager->itemPosCopy.z, managerValues[4], offsetZ, false);
-        Apply(manager->itemScaleCopy, managerValues[5], values.itemPreviewScale, true);
+        Apply(manager->itemScaleCopy, managerValues[5], PreviewScale(), true);
 
         if (changed && scale > 0.0f) {
             MoveLoadedModels(manager, manager->itemPos - from, manager->itemScale / scale);

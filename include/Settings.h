@@ -2,6 +2,9 @@
 
 namespace Settings
 {
+    // the smallest the item card and preview can be sized to. at nothing they can't be brought back
+    inline constexpr float MIN_ITEM_SCALE = 0.01f;
+
     //default setting values
     struct Values
     {
