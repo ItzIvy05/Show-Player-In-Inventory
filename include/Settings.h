@@ -30,6 +30,9 @@ namespace Settings
         // how much the player's moved horizontally, away from the item list
         float frameShift       = 0.0f;
 
+        // the card and 3D item placed and sized for the screen's shape, the sliders for them left aside
+        bool autoAdjust        = true;
+
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
         bool hideAppPrevItems  = false;
 
@@ -62,4 +65,4 @@ namespace Settings
 
     // whether GoToBed is installed, which lies the player down in a bed. without it a bed goes straight to the sleep menu
     [[nodiscard]] bool CanLieDown();
-}
+}

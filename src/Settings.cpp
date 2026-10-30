@@ -24,6 +24,7 @@ namespace
         { "fItemPreviewX",     &Settings::Values::itemPreviewX },
         { "fItemPreviewY",     &Settings::Values::itemPreviewY },
         { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
+        { "bAutoAdjust",       &Settings::Values::autoAdjust },
         { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
         { "fFrameShift",       &Settings::Values::frameShift },
         { "fSpotAspect",       &Settings::Values::spotAspect },
@@ -136,4 +137,4 @@ namespace Settings
     {
         return GetContainerActor(RE::ContainerMenu::ContainerMode::kPickpocket);
     }
-}
+}

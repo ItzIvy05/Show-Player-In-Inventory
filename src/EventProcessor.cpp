@@ -1,5 +1,6 @@
 #include "EventProcessor.h"
 
+#include "ItemDisplay.h"
 #include "MenuCamera.h"
 #include "Settings.h"
 
@@ -59,6 +60,10 @@ void EventProcessor::Register()
 
 void EventProcessor::OnMenu(std::string_view menuName, bool opening)
 {
+    if (opening) {
+        ItemDisplay::OnMenuOpen(menuName);
+    }
+
     if (menuName == RE::TweenMenu::MENU_NAME) {
         tweenOpen = opening;
         MenuCamera::GetSingleton()->SetCacheFrozen(tweenOpen || menuOpen);

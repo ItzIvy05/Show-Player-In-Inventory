@@ -4,4 +4,6 @@
 namespace ItemDisplay
 {
     void Update(RE::GFxMovieView* view);
+
+    void OnMenuOpen(std::string_view menuName);
 }

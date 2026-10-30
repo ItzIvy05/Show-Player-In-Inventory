@@ -354,18 +354,24 @@ namespace
             EndSection();
 
             BeginSection("$SPII_Items"_T);
+            Checkbox("$SPII_AutoAdjust"_T, values.autoAdjust, "$SPII_AutoAdjustTT"_T);
             static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
             if (apparelPreview) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
+            // set by Auto-Adjustment while it's on
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 FUCK::Indent();
+                FUCK::BeginDisabled(values.autoAdjust);
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
+                FUCK::EndDisabled();
                 FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
                 FUCK::Indent();
+                FUCK::BeginDisabled(values.autoAdjust);
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+                FUCK::EndDisabled();
                 FUCK::Unindent();
             }
             EndSection();
@@ -429,4 +435,4 @@ namespace SettingsUI
     {
         ControlsWindow::GetSingleton()->SetOpen(true);
     }
-}
+}

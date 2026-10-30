@@ -18,11 +18,11 @@ namespace
     constexpr float FRAMING_TOP    = 1.0f;
     constexpr float FRAMING_BOTTOM = -0.9f;
 
-    // where the item list ends when it can't be read, as a share of the screen's width
+    // where the item list ends when it can't be read (a bench's), as a share of a 16:9 screen's width
     constexpr float DEFAULT_LIST_EDGE = 0.45f;
 
     // how far across from the list the player's framed at 16:9 (0 at its edge, 1 at the screen's), and at a workbench with its own
-    // camera, nearer, leaving the station room. on a wider screen, further right by the Wide Screen Shift setting's share of the extra width
+    // camera, nearer, leaving room for the crafting bench
     constexpr float FRAMING_ACROSS = 0.5f;
     constexpr float BENCH_ACROSS   = 0.1f;
     constexpr float NORMAL_ASPECT  = 16.0f / 9.0f;
@@ -138,13 +138,30 @@ namespace
             .or_else([&] { return GetMenuListEdge<RE::MagicMenu>(ui); })
             .or_else([&] { return GetMenuListEdge<RE::BarterMenu>(ui); })
             .or_else([&] { return GetMenuListEdge<RE::ContainerMenu>(ui); })
-            .value_or(DEFAULT_LIST_EDGE);
+            .or_else([&] {
+                const ImVec2 display = FUCK::GetDisplaySize();
+                const float  aspect  = display.y > 0.0f ? display.x / display.y : NORMAL_ASPECT;
+                return std::optional{ DEFAULT_LIST_EDGE * NORMAL_ASPECT / std::max(aspect, NORMAL_ASPECT) };
+            })
+            .value();
     }
+
+    // the frame shift's own part on wider screens: for 21:9 (43:18), more outside the crafting menu, and more again for 32:9
+    constexpr float WIDE_FRAME_SHIFT       = -0.5f;
+    constexpr float WIDE_FRAME_SHIFT_ITEMS = -0.2f;
+    constexpr float WIDE_FRAME_SHIFT_SUPER = -0.4f;
+    constexpr float WIDE_ASPECT            = 43.0f / 18.0f;
+    constexpr float SUPER_WIDE_ASPECT      = 32.0f / 9.0f;
 
     // how far right or left the player is moved from the default framing
     float GetFrameShift()
     {
-        return Settings::values.frameShift;
+        const ImVec2 display = FUCK::GetDisplaySize();
+        const float  aspect  = display.y > 0.0f ? display.x / display.y : NORMAL_ASPECT;
+        const float  wide    = std::clamp((aspect - NORMAL_ASPECT) / (WIDE_ASPECT - NORMAL_ASPECT), 0.0f, 1.0f);
+        const float  ultra   = std::clamp((aspect - WIDE_ASPECT) / (SUPER_WIDE_ASPECT - WIDE_ASPECT), 0.0f, 1.0f);
+        const bool   bench   = RE::UI::GetSingleton()->IsMenuOpen(RE::CraftingMenu::MENU_NAME);
+        return Settings::values.frameShift + (WIDE_FRAME_SHIFT + (bench ? 0.0f : WIDE_FRAME_SHIFT_ITEMS)) * wide + WIDE_FRAME_SHIFT_SUPER * ultra;
     }
 
     // the body framed between the item list's edge and the screen's right edge (FRAMING_ACROSS, or BENCH_ACROSS at a bench), where it
