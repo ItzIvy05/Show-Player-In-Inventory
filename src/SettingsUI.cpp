@@ -359,20 +359,30 @@ namespace
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
+                FUCK::Indent();
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
+                FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
+                FUCK::Indent();
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+                FUCK::Unindent();
             }
             EndSection();
 
             FUCK::TableNextColumn();
             BeginSection("$SPII_Adjust"_T);
-            if (FUCK::CollapsingHeader("$SPII_Position"_T) && !camera->DrawPositionSliders()) {
-                FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+            if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
+                FUCK::Indent();
+                if (!camera->DrawPositionSliders()) {
+                    FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+                }
+                FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_Advanced"_T)) {
+                FUCK::Indent();
                 FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
+                FUCK::Unindent();
             }
             EndSection();
 
