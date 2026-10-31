@@ -28,13 +28,18 @@ namespace
         float y         =   0.0f;
         float scale     = 100.0f;
 
-        // how far its middle is from its origin (per 1% of its size), and how far its parent shifts it on the menu. measured when it's
-        // placed and again once the menu's laid out, not every frame, because its bounds change with the item shown
+        // its shape: its middle and top from its origin and its width, each per 1% of its size, and its parent's shift on the menu.
+        // measured when it's placed and again once the menu's laid out, not every frame, as its bounds change with the item shown
         bool  hasCentre    = false;
         float centreOffset = 0.0f;
+        float topOffset    = 0.0f;
+        float width        = 0.0f;
         float parentShift  = 0.0f;
+        float parentShiftY = 0.0f;
+
         bool  spotTaken    = false;  // its base noted as the item menus' spot, once the menu's laid out
         bool  onSpot       = false;  // a bench's, put on that spot
+        bool  measuredRequirements = false;  // a bench's requirements measured, once a visit
     };
 
     struct Area
@@ -259,7 +264,7 @@ namespace
     }
 
     // how far a clip's parent shifts it across the menu
-    bool GetParentShift(RE::GFxMovieView* view, RE::GFxValue& clip, float& shift, Rect* inParent = nullptr)
+    bool GetParentShift(RE::GFxMovieView* view, RE::GFxValue& clip, float& shift, Rect* inParent = nullptr, float* shiftY = nullptr)
     {
         RE::GFxValue parent;
         Rect onMenu;
@@ -270,6 +275,9 @@ namespace
         shift = onMenu.left - local.left;
         if (inParent) {
             *inParent = local;
+        }
+        if (shiftY) {
+            *shiftY = onMenu.top - local.top;
         }
         return true;
     }
@@ -393,60 +401,44 @@ namespace
         }
     }
 
-    // the top of the menu's bottom bar (SkyUI's, the crafting menu's) where it's shown, which the card is kept above as its text can't be
-    // read under it. a reskin that drops or hides the bar leaves the screen's edge
-    bool GetBottomBarTop(RE::GFxMovieView* view, float& top)
+    // at a bench once it's laid out, notes how far below the card's top its requirements reach (the "Requires:" line), as a share of
+    // the card's width. once a visit, from the card's measured shape
+    void NoteRequirements(RE::GFxMovieView* view, float y, float scale)
     {
-        RE::GFxValue bar;
-        const bool found = (view->GetVariable(&bar, "_root.Menu_mc.bottomBar") && bar.IsDisplayObject()) ||
-                           (view->GetVariable(&bar, "_root.Menu.BottomBarInfo") && bar.IsDisplayObject());
-        if (!found) {
-            return false;
-        }
+        RE::GFxValue clip;
         RE::GFxValue::DisplayInfo info;
-        bar.GetDisplayInfo(&info);
-        Rect rect;
-        if (!info.GetVisible() || info.GetAlpha() <= 0.0 || !GetBounds(view, bar, rect)) {
-            return false;
-        }
-        top = rect.top;
-        return true;
-    }
-
-    // the card moved back onto the menu where it would go off it or under its bottom bar, as it is now: a bench's card is taller with
-    // its ingredients, so placed low in the inventory it would be cut off there. with across false, it's only kept on screen up and down
-    void KeepOnScreen(RE::GFxMovieView* view, RE::GFxValue& clip, float x, float y, float scale, float& toX, float& toY, float toScale,
-        bool across = true)
-    {
-        RE::GFxValue visible;
-        Rect now;
-        Rect screen;
-        float width;
-        float height;
-        if (scale <= 0.0f || !GetBounds(view, clip, now) || !view->GetVariable(&visible, "Stage.visibleRect") || !visible.IsObject() ||
-            !GetNumber(visible, "x", screen.left) || !GetNumber(visible, "y", screen.top) || !GetNumber(visible, "width", width) ||
-            !GetNumber(visible, "height", height)) {
+        Rect requirements;
+        if (!view->GetVariable(&clip, "_root.Menu.ItemInfoHolder.AdditionalDescriptionHolder") || !clip.IsDisplayObject()) {
             return;
         }
-        screen.right = screen.left + width;
-        screen.bottom = screen.top + height;
-        if (float barTop; GetBottomBarTop(view, barTop) && barTop > screen.top && barTop < screen.bottom) {
-            screen.bottom = barTop;
+        clip.GetDisplayInfo(&info);
+        const float top   = card.parentShiftY + y + card.topOffset * scale;
+        const float width = card.width * scale * stretch;
+        if (!info.GetVisible() || width <= 0.0f || !GetBounds(view, clip, requirements)) {
+            return;
         }
+        card.measuredRequirements = true;
+        auto& limit = Settings::values.bottomLimit;
+        if (const float now = (requirements.bottom - top) / width; std::abs(now - limit) > 0.01f) {
+            limit = now;
+            Settings::Save();
+        }
+    }
 
-        // where it would be drawn once moved and sized
-        const float by = toScale / scale;
-        const auto fit = [](float& at, float low, float high, float min, float max) {
-            if (low < min || high - low > max - min) {
-                at += min - low;
-            } else if (high > max) {
-                at -= high - max;
-            }
-        };
-        if (across) {
-            fit(toX, toX + (now.left - x) * by, toX + (now.right - x) * by, screen.left, screen.right);
+    // lifts the card where a bench's requirements under it would go off the bottom of the screen, in every menu, so the card sits at the
+    // same height everywhere
+    void LiftForRequirements(RE::GFxMovieView* view, float& toY, float toScale)
+    {
+        const float limit = Settings::values.bottomLimit;
+        Rect visible;
+        if (limit <= 0.0f || !card.hasCentre || !GetVisible(view, visible)) {
+            return;
         }
-        fit(toY, toY + (now.top - y) * by, toY + (now.bottom - y) * by, screen.top, screen.bottom);
+        const float top    = card.parentShiftY + toY + card.topOffset * toScale;
+        const float bottom = top + limit * card.width * toScale * stretch;
+        if (bottom > visible.bottom) {
+            toY -= bottom - visible.bottom;
+        }
     }
 
     // moreHUD Inventory Edition's large card follows SkyUI's only as the card changes, so it's moved and sized with it
@@ -515,12 +507,19 @@ namespace
             }
         };
 
-        if (card.view != view || !card.placed) {
-            card = { view, true, x, y, scale, x, y, scale };
-            if (Rect local; GetParentShift(view, clip, card.parentShift, &local)) {
+        // the card's shape (see Card), from its bounds now
+        const auto measure = [&] {
+            if (Rect local; GetParentShift(view, clip, card.parentShift, &local, &card.parentShiftY)) {
                 card.hasCentre    = true;
                 card.centreOffset = ((local.left + local.right) * 0.5f - x) / scale;
+                card.topOffset    = (local.top - y) / scale;
+                card.width        = (local.right - local.left) / scale;
             }
+        };
+
+        if (card.view != view || !card.placed) {
+            card = { view, true, x, y, scale, x, y, scale };
+            measure();
             putOnSpot();
         } else if (x != card.x || y != card.y || scale != card.scale) {
             // moved since by the menu or another mod, by however far it moved, as they move it by offsets (SkyUI's vertical one,
@@ -536,10 +535,7 @@ namespace
         // now the menu's laid out, save the item menus' spot and measure the card's middle again
         if (settled && !card.spotTaken) {
             card.spotTaken = true;
-            if (Rect local; GetParentShift(view, clip, card.parentShift, &local)) {
-                card.hasCentre    = true;
-                card.centreOffset = ((local.left + local.right) * 0.5f - x) / scale;
-            }
+            measure();
             card.onSpot = false;
             putOnSpot();
             // the spot is where the menu put the card, before it was moved
@@ -564,11 +560,13 @@ namespace
                 toX = middle - card.parentShift - card.centreOffset * toScale;
             }
         }
-        if (IsCardSet()) {
-            KeepOnScreen(view, clip, x, y, scale, toX, toY, toScale, !IsAutoAdjust());
-            if (card.hasCentre && IsCraftingMenu(view)) {
-                CentreMenuDescription(view, card.parentShift + toX + card.centreOffset * toScale);
-            }
+        if (card.spotTaken && !card.measuredRequirements && card.hasCentre && IsCraftingMenu(view)) {
+            NoteRequirements(view, y, scale);
+        }
+        LiftForRequirements(view, toY, toScale);
+
+        if (IsCardSet() && card.hasCentre && IsCraftingMenu(view)) {
+            CentreMenuDescription(view, card.parentShift + toX + card.centreOffset * toScale);
         }
 
         if (toX == x && toY == y && toScale == scale) {

@@ -46,6 +46,9 @@ namespace Settings
         float areaSpotWidth    = 0.0f;
         float areaSpotHeight   = 0.0f;
 
+        // how far below the card's top a bench's requirements reach, as a share of the card's width, measured at the last bench
+        float bottomLimit      = 0.0f;
+
         int version = 0;  // the settings' version, see VERSION in Settings.cpp
     };
 

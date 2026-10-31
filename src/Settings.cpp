@@ -35,6 +35,7 @@ namespace
         { "fAreaSpotY",        &Settings::Values::areaSpotY },
         { "fAreaSpotWidth",    &Settings::Values::areaSpotWidth },
         { "fAreaSpotHeight",   &Settings::Values::areaSpotHeight },
+        { "fBottomLimit",      &Settings::Values::bottomLimit },
         { "iVersion",          &Settings::Values::version },
     } };
 
@@ -49,7 +50,7 @@ namespace Settings
 {
     void SetDefaults()
     {
-        // the tutorial has been seen either way, and the version, and the item menus' spots stay
+        // the tutorial has been seen either way, and the version, the item menus' spots and the bench's requirements stay
         const Values kept = values;
         values = {};
         values.version        = VERSION;
@@ -62,6 +63,7 @@ namespace Settings
         values.areaSpotY      = kept.areaSpotY;
         values.areaSpotWidth  = kept.areaSpotWidth;
         values.areaSpotHeight = kept.areaSpotHeight;
+        values.bottomLimit    = kept.bottomLimit;
     }
 
     // settings from an older version are cleared
