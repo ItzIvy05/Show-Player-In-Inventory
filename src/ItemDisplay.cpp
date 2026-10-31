@@ -285,7 +285,15 @@ namespace
         return true;
     }
 
-    // the part of the movie on screen, 720 high
+    // the menus' stage is 1280 wide, its middle staying put however wide the screen
+    constexpr float STAGE_MIDDLE = 640.0f;
+
+    // how much wider than its own pixels a menu's drawn: one stretched to fill the screen ("exactFit", as the staff enchanting mod's
+    // crafting menu) draws its 1280 across the whole width. 1 for the rest. the spots, sliders and layout are in unstretched pixels,
+    // so they're narrowed by it across
+    float stretch = 1.0f;
+
+    // the part of the movie on screen, 720 high, and the menu's stretch. a stretched menu's shape isn't the screen's, so it's not kept
     bool GetVisible(RE::GFxMovieView* view, Rect& out)
     {
         RE::GFxValue visible;
@@ -296,8 +304,15 @@ namespace
             height <= 0.0f) {
             return false;
         }
-        out.right     = out.left + width;
-        out.bottom    = out.top + height;
+        out.right  = out.left + width;
+        out.bottom = out.top + height;
+
+        RE::GFxValue mode;
+        if (view->GetVariable(&mode, "Stage.scaleMode") && mode.IsString() && std::string_view(mode.GetString()) == "exactFit") {
+            stretch = Aspect() / (width / height);
+            return true;
+        }
+        stretch       = 1.0f;
         visibleWidth  = width;
         visibleHeight = height;
         return true;
@@ -468,16 +483,20 @@ namespace
     // settled: the menu's laid out, so the item menus' spot can be noted
     void UpdateCard(RE::GFxMovieView* view, bool settled)
     {
+        // its size taken up and down, and how much narrower the menu has it across (a stretched menu's), which is kept
         RE::GFxValue clip;
         float x;
         float y;
         float scale;
-        if (!GetCard(view, clip) || !GetNumber(clip, "_x", x) || !GetNumber(clip, "_y", y) || !GetNumber(clip, "_xscale", scale) ||
-            scale <= 0.0f) {
+        float scaleX;
+        if (!GetCard(view, clip) || !GetNumber(clip, "_x", x) || !GetNumber(clip, "_y", y) || !GetNumber(clip, "_yscale", scale) ||
+            !GetNumber(clip, "_xscale", scaleX) || scale <= 0.0f) {
             return;
         }
+        const float squash = scaleX / scale;
 
-        // a bench's card put on the item menus' spot, sized to match. tried again once laid out
+        // a bench's card put on the item menus' spot, sized to match on screen. again once laid out, as a stretched menu's stretch may
+        // only be known by then
         const auto putOnSpot = [&] {
             float left;
             float top;
@@ -486,9 +505,10 @@ namespace
                 return;
             }
             if (LoadSpots(); itemMenuCard.valid && IsCardSet()) {
-                const float by = itemMenuCard.width / (right - left);
+                const float by   = itemMenuCard.width / ((right - left) * stretch);
+                const float spot = STAGE_MIDDLE + (itemMenuCard.centreX - itemMenuCard.width * 0.5f - STAGE_MIDDLE) / stretch;
                 card.baseScale = scale * by;
-                card.baseX     = itemMenuCard.centreX - itemMenuCard.width * 0.5f - (left - x) * by;
+                card.baseX     = spot - (left - x) * by;
                 card.baseY     = itemMenuCard.top - (top - y) * by;
                 card.onSpot    = true;
             }
@@ -519,6 +539,7 @@ namespace
                 card.hasCentre    = true;
                 card.centreOffset = ((local.left + local.right) * 0.5f - x) / scale;
             }
+            card.onSpot = false;
             putOnSpot();
             // moved back to where the menu put it
             if (Rect now; !IsCraftingMenu(view) && GetBounds(view, clip, now)) {
@@ -531,14 +552,14 @@ namespace
         // positive is right and up. with Auto-Adjustment, the menu's height and size, at the layout's place across
         const auto& values = Settings::values;
         float toScale = card.baseScale * CardScale();
-        float toX     = card.baseX + values.itemCardX;
+        float toX     = card.baseX + values.itemCardX / stretch;
         float toY     = card.baseY - values.itemCardY;
         if (IsAutoAdjust()) {
             toScale = card.baseScale;
             toX     = card.baseX;
             toY     = card.baseY;
             if (Rect visible; card.hasCentre && GetVisible(view, visible)) {
-                const float middle = (visible.left + visible.right) * 0.5f + GetAutoLayout().cardX;
+                const float middle = (visible.left + visible.right) * 0.5f + GetAutoLayout().cardX / stretch;
                 toX = middle - card.parentShift - card.centreOffset * toScale;
             }
         }
@@ -555,13 +576,13 @@ namespace
 
         clip.SetMember("_x", toX);
         clip.SetMember("_y", toY);
-        clip.SetMember("_xscale", toScale);
+        clip.SetMember("_xscale", toScale * squash);
         clip.SetMember("_yscale", toScale);
 
         // as Flash keeps them, rounded to its twips, so the next frame finds them unchanged
         GetNumber(clip, "_x", card.x);
         GetNumber(clip, "_y", card.y);
-        GetNumber(clip, "_xscale", card.scale);
+        GetNumber(clip, "_yscale", card.scale);
         MoveMoreHUD(view, card.x - x, card.y - y, card.scale / scale);
     }
 
@@ -585,9 +606,9 @@ namespace
             area = { view, x, y, width, height, x, y, width, height };
             if (IsCraftingMenu(view)) {
                 if (LoadSpots(); itemMenuArea.valid && IsPreviewSet()) {
-                    area.baseX = itemMenuArea.x;
-                    area.baseY = itemMenuArea.y;
-                    area.baseWidth = itemMenuArea.width;
+                    area.baseX      = STAGE_MIDDLE + (itemMenuArea.x - STAGE_MIDDLE) / stretch;
+                    area.baseY      = itemMenuArea.y;
+                    area.baseWidth  = itemMenuArea.width / stretch;
                     area.baseHeight = itemMenuArea.height;
                 }
             }
@@ -603,7 +624,7 @@ namespace
         const auto& values = Settings::values;
         float toWidth  = area.baseWidth * PreviewScale();
         float toHeight = area.baseHeight * PreviewScale();
-        float toX      = area.baseX + values.itemPreviewX - (toWidth - area.baseWidth) * 0.5f;
+        float toX      = area.baseX + values.itemPreviewX / stretch - (toWidth - area.baseWidth) * 0.5f;
         float toY      = area.baseY - values.itemPreviewY - (toHeight - area.baseHeight) * 0.5f;
 
         // with Auto-Adjustment, sized and moved with the preview
@@ -614,8 +635,8 @@ namespace
             const auto& scale  = previewSettings[9].value;
             const auto& z      = previewSettings[5].value;
             const float by     = scale.valid && scale.base > 0.0f ? layout.previewScale / scale.base : 1.0f;
-            const float up     = z.valid ? (layout.previewZ - z.base) * PREVIEW_SHARE_PER_UNIT * (visible.right - visible.left) : 0.0f;
-            const float middle = (visible.left + visible.right) * 0.5f + layout.previewX;
+            const float up     = z.valid ? (layout.previewZ - z.base) * PREVIEW_SHARE_PER_UNIT * (visible.right - visible.left) * stretch : 0.0f;
+            const float middle = (visible.left + visible.right) * 0.5f + layout.previewX / stretch;
             toWidth  = area.baseWidth * by;
             toHeight = area.baseHeight * by;
             toX      = middle - parentShift - toWidth * 0.5f;
@@ -755,7 +776,7 @@ namespace ItemDisplay
     {
         if (menuName == RE::InventoryMenu::MENU_NAME || menuName == RE::MagicMenu::MENU_NAME ||
             menuName == RE::BarterMenu::MENU_NAME || menuName == RE::ContainerMenu::MENU_NAME ||
-            menuName == RE::CraftingMenu::MENU_NAME || menuName == RE::GiftMenu::MENU_NAME) {
+            menuName == RE::GiftMenu::MENU_NAME || Settings::IsCraftingMenu(menuName)) {
             menuOpened = true;
         }
     }
@@ -777,6 +798,11 @@ namespace ItemDisplay
             ready = false;
             card = {};
             rotationArea = {};
+        }
+
+        // the menu's stretch, before anything's placed by it
+        if (Rect visible; !GetVisible(view, visible)) {
+            stretch = 1.0f;
         }
 
         // the preview from the first frame, as it's the game's settings rather than the menu's layout

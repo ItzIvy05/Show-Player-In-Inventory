@@ -9,6 +9,7 @@ class MenuCamera : public REX::Singleton<MenuCamera>, public FUCK::ICameraClient
 {
 public:
     static void InstallHooks();
+    static void HookMenu(std::string_view menuName);
 
     void        Start(std::string_view menuName);
     void        Stop();

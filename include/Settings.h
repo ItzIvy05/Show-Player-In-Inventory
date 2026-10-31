@@ -57,6 +57,12 @@ namespace Settings
     void Save();
     [[nodiscard]] bool IsWatchedMenu(std::string_view menuName);
 
+    // the staff enchanting mod's crafting menu, a class of its own
+    inline constexpr std::string_view STAFF_CRAFTING_MENU = "StaffCraftingMenu";
+
+    // the game's crafting menu or the staff enchanting mod's
+    [[nodiscard]] bool IsCraftingMenu(std::string_view menuName);
+
     // the follower whose inventory is open, shown in the player's place, or nullptr
     [[nodiscard]] RE::Actor* GetFollower();
 

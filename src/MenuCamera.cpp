@@ -160,7 +160,8 @@ namespace
         const float  aspect  = display.y > 0.0f ? display.x / display.y : NORMAL_ASPECT;
         const float  wide    = std::clamp((aspect - NORMAL_ASPECT) / (WIDE_ASPECT - NORMAL_ASPECT), 0.0f, 1.0f);
         const float  ultra   = std::clamp((aspect - WIDE_ASPECT) / (SUPER_WIDE_ASPECT - WIDE_ASPECT), 0.0f, 1.0f);
-        const bool   bench   = RE::UI::GetSingleton()->IsMenuOpen(RE::CraftingMenu::MENU_NAME);
+        auto*        ui      = RE::UI::GetSingleton();
+        const bool   bench   = ui->IsMenuOpen(RE::CraftingMenu::MENU_NAME) || ui->IsMenuOpen(Settings::STAFF_CRAFTING_MENU.data());
         return Settings::values.frameShift + (WIDE_FRAME_SHIFT + (bench ? 0.0f : WIDE_FRAME_SHIFT_ITEMS)) * wide + WIDE_FRAME_SHIFT_SUPER * ultra;
     }
 
@@ -476,18 +477,45 @@ namespace
         return furniture;
     }
 
-    // how a workbench is shown: the grindstone, a free-standing alchemy lab or enchanter, and any bench without its own camera get one set
-    // by hand (shot), unframed. any other starts from its own camera turned 45 degrees anticlockwise round the player (25 at a desk's
+    // how a workbench is shown: the grindstone, a free-standing alchemy lab or enchanter, and any other bench without its own camera get
+    // one set by hand (shot), unframed. any other starts from its camera turned 45 degrees anticlockwise round the player (25 at a desk's
     // alchemy lab or enchanter, framed chest up) and eases into the framing, near the list
     struct BenchView
     {
-        RE::NiTransform game;  // the game's camera as the menu opened
+        RE::NiTransform game;    // the game's camera as the menu opened
         std::optional<BenchShot> shot;
         bool ownCamera = false;  // the bench animation's
         bool desk = false;       // an alchemy lab or enchanter on a desk
     };
 
-    BenchView GetBenchView(RE::PlayerCharacter* player, RE::PlayerCamera* camera)
+    RE::TESObjectREFR* RefOf(RE::TESObjectREFR* ref) { return ref; }
+    RE::TESObjectREFR* RefOf(RE::TESObjectREFR& ref) { return &ref; }
+
+    // the nearest staff enchanter in reach, for the staff enchanting mod's menu, which opens in place of using it
+    RE::TESFurniture* FindStaffEnchanter(RE::PlayerCharacter* player, RE::NiPointer<RE::TESObjectREFR>* ref)
+    {
+        constexpr float REACH = 300.0f;
+
+        RE::TESFurniture* found = nullptr;
+        float nearest = REACH;
+        const RE::NiPoint3 from = player->GetPosition();
+        RE::TES::GetSingleton()->ForEachReferenceInRange(player, REACH, [&](auto&& a_ref) {
+            auto* candidate = RefOf(a_ref);
+            auto* base = candidate ? candidate->GetBaseObject() : nullptr;
+            auto* furniture = base ? base->As<RE::TESFurniture>() : nullptr;
+            if (furniture && furniture->HasKeywordString("DLC2StaffEnchanter")) {
+                if (const float distance = candidate->GetPosition().GetDistance(from); distance < nearest) {
+                    nearest = distance;
+                    found = furniture;
+                    *ref = RE::NiPointer<RE::TESObjectREFR>(candidate);
+                }
+            }
+            return RE::BSContainer::ForEachResult::kContinue;
+        });
+        return found;
+    }
+
+    BenchView GetBenchView(RE::PlayerCharacter* player, RE::PlayerCamera* camera, bool staffMenu)
     {
         using BenchType = RE::TESFurniture::WorkBenchData::BenchType;
 
@@ -500,10 +528,16 @@ namespace
         view.ownCamera = state == RE::CameraState::kAnimated || state == RE::CameraState::kPCTransition;
 
         RE::NiPointer<RE::TESObjectREFR> bench;
-        if (auto* furniture = GetWorkbench(player, &bench)) {
+        auto* furniture = GetWorkbench(player, &bench);
+        if (!furniture && staffMenu) {
+            furniture = FindStaffEnchanter(player, &bench);
+        }
+        if (furniture) {
             const auto type = static_cast<BenchType>(furniture->workBenchData.benchType.underlying());
             const bool alchemy = type == BenchType::kAlchemy || type == BenchType::kAlchemyExperiment;
-            const bool enchanting = type == BenchType::kEnchanting || type == BenchType::kEnchantingExperiment;
+            // Dragonborn's staff enchanter is a create-object bench, known by the keyword its recipes need, and shown as an enchanter is
+            const bool staff      = furniture->HasKeywordString("DLC2StaffEnchanter");
+            const bool enchanting = type == BenchType::kEnchanting || type == BenchType::kEnchantingExperiment || staff;
             const float bottom = bench->GetPositionZ() + static_cast<float>(furniture->boundData.boundMin.z) * bench->GetScale();
             const bool onFloor = bottom - player->GetPositionZ() < ON_A_DESK;
 
@@ -516,7 +550,7 @@ namespace
                 view.shot = GRINDSTONE_SHOT;
             }
         }
-        if (!view.shot && !view.ownCamera) {
+        if (!view.shot && !view.ownCamera && !view.desk) {
             view.shot = WORKBENCH_SHOT;
         }
         return view;
@@ -747,6 +781,31 @@ namespace
         static inline REL::Relocation<decltype(AdvanceMovie)> _AdvanceMovie;
     };
 
+    // the staff enchanting mod's crafting menu, a class of its own in its own plugin, so hooked through its vtable as it first opens
+    struct StaffMenuHook
+    {
+        using AdvanceMovieFunc = void (*)(RE::IMenu*, float, std::uint32_t);
+
+        static void AdvanceMovie(RE::IMenu* a_this, float a_interval, std::uint32_t a_currentTime)
+        {
+            _AdvanceMovie(a_this, a_interval, a_currentTime);
+            ItemDisplay::Update(a_this->uiMovie.get());
+            MenuCamera::GetSingleton()->Update(a_interval);
+        }
+
+        static void Install(RE::IMenu* a_menu)
+        {
+            if (_AdvanceMovie || !a_menu) {
+                return;
+            }
+            auto* vtbl = *reinterpret_cast<std::uintptr_t**>(a_menu);
+            _AdvanceMovie = reinterpret_cast<AdvanceMovieFunc>(vtbl[0x5]);
+            REL::safe_write(reinterpret_cast<std::uintptr_t>(&vtbl[0x5]), reinterpret_cast<std::uintptr_t>(&AdvanceMovie));
+        }
+
+        static inline AdvanceMovieFunc _AdvanceMovie = nullptr;
+    };
+
     // thank you myztikrice, from Show Player in Menus
     // replaces the item preview load, so the preview stays empty while the player is shown. installed only once the option is turned on,
     // or with Apparel Preview, whose pieces are shown on the player
@@ -816,6 +875,14 @@ void MenuCamera::InstallHooks()
     }
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
+}
+
+// a mod's menu with a class of its own, hooked as it first opens
+void MenuCamera::HookMenu(std::string_view menuName)
+{
+    if (menuName == Settings::STAFF_CRAFTING_MENU) {
+        StaffMenuHook::Install(RE::UI::GetSingleton()->GetMenu(menuName).get());
+    }
 }
 
 void MenuCamera::SetCacheFrozen(bool frozen)
@@ -890,7 +957,7 @@ void MenuCamera::Start(std::string_view menuName)
     const bool allowed = settled && (!lying || Settings::CanLieDown());
     // the furniture and free cameras aren't the player's own, so switching either to third person would break it. a crafting menu keeps the
     // furniture camera, with FUCK over it (furnitureBase)
-    const bool crafting = menuName == RE::CraftingMenu::MENU_NAME;
+    const bool crafting = Settings::IsCraftingMenu(menuName);
     const bool atFurnitureCamera = camera->currentState->id == RE::CameraState::kFurniture;
     const bool ownCamera = camera->IsInFreeCameraMode() || (atFurnitureCamera && !crafting);
     if (!allowed || ownCamera) {
@@ -899,9 +966,10 @@ void MenuCamera::Start(std::string_view menuName)
     furnitureBase = atFurnitureCamera;
 
     // at a workbench (see BenchView)
-    const auto bench = crafting && !furnitureBase && camera->cameraRoot ? std::optional{ GetBenchView(player, camera) } : std::nullopt;
+    const bool staffMenu = menuName == Settings::STAFF_CRAFTING_MENU;
+    const auto bench = crafting && !furnitureBase && camera->cameraRoot ? std::optional{ GetBenchView(player, camera, staffMenu) } : std::nullopt;
     benchPlaced      = bench && bench->shot;
-    benchFraming     = bench && bench->ownCamera;
+    benchFraming     = bench && (bench->ownCamera || bench->desk);
 
     playerAngleX = player->GetAngleX();
     playerAngleZ = player->GetAngleZ();

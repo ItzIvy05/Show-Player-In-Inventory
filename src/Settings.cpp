@@ -90,7 +90,7 @@ namespace Settings
         if (menuName == RE::InventoryMenu::MENU_NAME ||
             menuName == RE::MagicMenu::MENU_NAME     ||
             menuName == RE::BarterMenu::MENU_NAME    ||
-            menuName == RE::CraftingMenu::MENU_NAME) {
+            IsCraftingMenu(menuName)) {
             return true;
         }
 
@@ -107,6 +107,11 @@ namespace Settings
         }
 
         return false;
+    }
+
+    bool IsCraftingMenu(std::string_view menuName)
+    {
+        return menuName == RE::CraftingMenu::MENU_NAME || menuName == STAFF_CRAFTING_MENU;
     }
 
     bool CanLieDown()

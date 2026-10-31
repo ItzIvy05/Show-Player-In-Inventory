@@ -61,6 +61,7 @@ void EventProcessor::Register()
 void EventProcessor::OnMenu(std::string_view menuName, bool opening)
 {
     if (opening) {
+        MenuCamera::HookMenu(menuName);
         ItemDisplay::OnMenuOpen(menuName);
     }
 
