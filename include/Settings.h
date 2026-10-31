@@ -66,6 +66,9 @@ namespace Settings
     // whether it's the game's crafting menu or the staff enchanting mod's
     [[nodiscard]] bool IsCraftingMenu(std::string_view menuName);
 
+    // hiding the card and 3D item during Apparel Preview, only on screens up to 16:9, where they cover the piece
+    [[nodiscard]] bool CanHideApparelPreviewItems();
+
     // the follower whose inventory is open, shown in the player's place, or nullptr
     [[nodiscard]] RE::Actor* GetFollower();
 

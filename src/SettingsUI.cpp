@@ -360,7 +360,7 @@ namespace
             BeginSection("$SPII_Items"_T);
             Checkbox("$SPII_AutoAdjust"_T, values.autoAdjust, "$SPII_AutoAdjustTT"_T);
             static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
-            if (apparelPreview) {
+            if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
             // these are set by Auto-Adjustment while it's on

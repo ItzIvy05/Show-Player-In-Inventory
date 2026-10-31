@@ -623,6 +623,11 @@ namespace
         return ref ? ref->As<RE::Actor>() : nullptr;
     }
 
+    bool HideApparelPreviewItems()
+    {
+        return Settings::CanHideApparelPreviewItems() && Settings::values.hideAppPrevItems;
+    }
+
     bool HasApparelPreview()
     {
         static const bool installed = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
@@ -815,7 +820,7 @@ namespace
         {
             auto* object = a_entry ? a_entry->GetObject() : nullptr;
             auto* camera = MenuCamera::GetSingleton();
-            if (!object || (Settings::values.hideAppPrevItems && camera->IsPreviewShowingPlayer())) {
+            if (!object || (HideApparelPreviewItems() && camera->IsPreviewShowingPlayer())) {
                 a_this->UnloadInventoryItem();
                 return;
             }
@@ -1485,7 +1490,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && Settings::values.hideAppPrevItems) {
+        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && HideApparelPreviewItems()) {
             models->UnloadInventoryItem();
         }
         HideItemCards(true);
@@ -1511,7 +1516,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
 // back, and what holds the card hidden too, so that fade can't show it for a frame
 void MenuCamera::HideItemCards(bool hide)
 {
-    if (hide && !Settings::values.hideAppPrevItems) {
+    if (hide && !HideApparelPreviewItems()) {
         hide = false;
     }
 

@@ -116,6 +116,12 @@ namespace Settings
         return menuName == RE::CraftingMenu::MENU_NAME || menuName == STAFF_CRAFTING_MENU;
     }
 
+    bool CanHideApparelPreviewItems()
+    {
+        const auto size = FUCK::GetDisplaySize();
+        return size.y > 0.0f && size.x / size.y <= 16.0f / 9.0f + 0.001f;
+    }
+
     bool CanLieDown()
     {
         static const bool installed = GetModuleHandleW(L"GoToBed.dll") != nullptr;
@@ -144,4 +150,4 @@ namespace Settings
     {
         return GetContainerActor(RE::ContainerMenu::ContainerMode::kPickpocket);
     }
-}
+}
