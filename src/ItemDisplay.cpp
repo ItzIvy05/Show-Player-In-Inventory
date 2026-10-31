@@ -64,6 +64,8 @@ namespace
     };
 
     Card card;
+
+    float labelBaseX = NAN;  // where the menu put a bench's description
     Area rotationArea;
 
     // the card's spot in the item menus as they lay it out, before the offsets, which a bench's card is put on so the sliders place it
@@ -458,18 +460,34 @@ namespace
         clip.SetMember("_yscale", scale * scaleBy);
     }
 
-    // a bench's description, kept centred over the card
-    void CentreMenuDescription(RE::GFxMovieView* view, float middle)
+    // a bench's description, moved by its offset from where the menu put it, or with Auto-Adjustment centred over the card, which goes to
+    // the layout's middle
+    void PlaceMenuDescription(RE::GFxMovieView* view, bool settled)
     {
         RE::GFxValue clip;
-        Rect bounds;
         float x;
-        if (!view->GetVariable(&clip, "_root.Menu.MenuDescriptionHolder") || !clip.IsDisplayObject() || !GetNumber(clip, "_x", x) ||
-            !GetBounds(view, clip, bounds)) {
+        if (!IsCraftingMenu(view) || !view->GetVariable(&clip, "_root.Menu.MenuDescriptionHolder") || !clip.IsDisplayObject() || !GetNumber(clip, "_x", x)) {
             return;
         }
-        if (const float dx = middle - (bounds.left + bounds.right) * 0.5f; std::abs(dx) > 0.5f) {
-            clip.SetMember("_x", x + dx);
+
+        // hidden till the menu's laid out, as it places it then (SkyUI 6 by the card, once its config loads), so it's only seen where it
+        // goes, even left as it is
+        if (!settled) {
+            clip.SetMember("_visible", false);
+            return;
+        }
+        if (std::isnan(labelBaseX)) {
+            labelBaseX = x;
+            clip.SetMember("_visible", true);
+        }
+
+        float toX = labelBaseX + Settings::values.benchLabelX / stretch;
+        if (Rect visible, bounds; IsAutoAdjust() && GetVisible(view, visible) && GetBounds(view, clip, bounds)) {
+            const float middle = (visible.left + visible.right) * 0.5f + GetAutoLayout().cardX / stretch;
+            toX = x + middle - (bounds.left + bounds.right) * 0.5f;
+        }
+        if (std::abs(toX - x) > 0.5f) {
+            clip.SetMember("_x", toX);
         }
     }
 
@@ -564,10 +582,6 @@ namespace
             NoteRequirements(view, y, scale);
         }
         LiftForRequirements(view, toY, toScale);
-
-        if (IsCardSet() && card.hasCentre && IsCraftingMenu(view)) {
-            CentreMenuDescription(view, card.parentShift + toX + card.centreOffset * toScale);
-        }
 
         if (toX == x && toY == y && toScale == scale) {
             return;
@@ -796,6 +810,7 @@ namespace ItemDisplay
             frames = 0;
             ready = false;
             card = {};
+            labelBaseX = NAN;
             rotationArea = {};
         }
 
@@ -813,6 +828,7 @@ namespace ItemDisplay
             const bool waiting = IsSkyUI(view) ? IsSkyUIWaiting(view) : frames < SETTLE_FRAMES;
             if (waiting && frames < GIVE_UP_FRAMES) {
                 ++frames;
+                PlaceMenuDescription(view, false);
                 if (IsAutoAdjust()) {
                     UpdateCard(view, false);
                     UpdateRotationArea(view, false);
@@ -824,6 +840,7 @@ namespace ItemDisplay
 
         UpdateCard(view, true);
         UpdateRotationArea(view, true);
+        PlaceMenuDescription(view, true);
     }
 
 }

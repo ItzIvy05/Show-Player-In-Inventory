@@ -26,6 +26,7 @@ namespace Settings
         float itemPreviewX     = 0.0f;
         float itemPreviewY     = 0.0f;
         float itemPreviewScale = 1.0f;
+        float benchLabelX      = 0.0f;  // a crafting bench's description, across
 
         // how much the player's moved horizontally, away from the item list
         float frameShift       = 0.0f;

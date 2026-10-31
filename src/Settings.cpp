@@ -24,6 +24,7 @@ namespace
         { "fItemPreviewX",     &Settings::Values::itemPreviewX },
         { "fItemPreviewY",     &Settings::Values::itemPreviewY },
         { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
+        { "fBenchLabelX",      &Settings::Values::benchLabelX },
         { "bAutoAdjust",       &Settings::Values::autoAdjust },
         { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
         { "fFrameShift",       &Settings::Values::frameShift },

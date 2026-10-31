@@ -375,6 +375,13 @@ namespace
                 FUCK::Indent();
                 FUCK::BeginDisabled(values.autoAdjust);
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+                FUCK::Separator();
+                const ImVec2 screen = FUCK::GetDisplaySize();
+                const float  across = 720.0f * (screen.y > 0.0f ? screen.x / screen.y : 16.0f / 9.0f);
+                if (FUCK::DragFloat("$SPII_BenchLabelX"_T, &values.benchLabelX, 1.0f, -across, across, "%.0f")) {
+                    Settings::Save();
+                }
+                FUCK::SetTooltip("$SPII_BenchLabelXTT"_T);
                 FUCK::EndDisabled();
                 FUCK::Unindent();
             }
