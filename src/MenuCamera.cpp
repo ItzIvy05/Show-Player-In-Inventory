@@ -43,7 +43,7 @@ namespace
     constexpr float HELD_REACH  = 50.0f;
     constexpr float HELD_HEIGHT = 250.0f;
 
-    // an animal posed in your arms by another mod sits further out in front of you, so it's looked for this far away
+    // an animal posed in your arms by another mod (Cat Carry) sits further out in front of you, so it's looked for this far away
     constexpr float POSED_REACH = 120.0f;
 
     // the room round the body when they're holding someone, so whoever's riding behind or carried fits in too (FUCK's own is 1.15)
