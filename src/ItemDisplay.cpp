@@ -28,8 +28,8 @@ namespace
         float y         =   0.0f;
         float scale     = 100.0f;
 
-        // its middle from its origin, per 1% of its size, and its parent's offset. measured when placed and once laid out, as its
-        // bounds change with the item shown
+        // how far its middle is from its origin (per 1% of its size), and how far its parent shifts it on the menu. measured when it's
+        // placed and again once the menu's laid out, not every frame, because its bounds change with the item shown
         bool  hasCentre    = false;
         float centreOffset = 0.0f;
         float parentShift  = 0.0f;
@@ -120,7 +120,7 @@ namespace
         return true;
     }
 
-    // the base taken afresh if the value isn't what was last set, then set to what `to` makes of it. false if it was already there
+    // takes a new base if the value isn't what was last set, then sets the value from that base with `to`. false if nothing changed
     template <class To>
     bool Apply(float& current, Value& value, To&& to)
     {
@@ -148,11 +148,11 @@ namespace
         return std::max(Settings::values.itemPreviewScale, Settings::MIN_ITEM_SCALE);
     }
 
-    // the menu's size on screen, as last found
+    // the menu's size on screen, from the last time it was read
     float visibleWidth  = 0.0f;
     float visibleHeight = 0.0f;
 
-    // the screen's shape, from the menu once found, as the display's size can misread while alt-tabbed
+    // the screen's shape, taken from the menu once it's been read, because the display's size can misread while alt-tabbed
     float Aspect()
     {
         if (visibleWidth > 0.0f && visibleHeight > 0.0f) {
@@ -167,10 +167,11 @@ namespace
         return a + t * (b - a);
     }
 
-    // Auto-Adjustment: placed by the screen's shape, between the rows below. across in the movie's pixels from the screen's
-    // middle, the movie 720 high
+    // Auto-Adjustment: where the card and preview go for each screen shape, blended between the rows below. positions across are in the
+    // movie's pixels from the middle of the screen, with the movie 720 high
 
-    // a unit of the preview's position as a share of the screen's width, on any shape. a unit up is as many pixels
+    // how much of the screen's width one unit of the preview's position covers. it's the same on any screen shape, and a unit up covers
+    // the same number of pixels
     constexpr float PREVIEW_SHARE_PER_UNIT = 0.00623f;
 
     // positions based on the default ini value, fInventory3DItemPosYWide
@@ -211,7 +212,7 @@ namespace
         return AUTO_LAYOUTS.back();
     }
 
-    // the preview's place across in the game's units, a lower x further right
+    // the preview's position across in the game's units, where a lower x is further right
     float AutoPreviewX(const AutoLayout& layout)
     {
         const float width = visibleWidth > 0.0f ? visibleWidth : 720.0f * Aspect();  // a 720 high movie until it's found
@@ -250,14 +251,14 @@ namespace
                out.right > out.left;
     }
 
-    // and on the menu
+    // where a clip is drawn on the menu
     bool GetBounds(RE::GFxMovieView* view, RE::GFxValue& clip, Rect& out)
     {
         RE::GFxValue root;
         return view->GetVariable(&root, "_root") && GetBoundsIn(clip, root, out);
     }
 
-    // how far across the menu a clip's parent puts it
+    // how far a clip's parent shifts it across the menu
     bool GetParentShift(RE::GFxMovieView* view, RE::GFxValue& clip, float& shift, Rect* inParent = nullptr)
     {
         RE::GFxValue parent;
@@ -285,15 +286,15 @@ namespace
         return true;
     }
 
-    // the menus' stage is 1280 wide, its middle staying put however wide the screen
+    // the menus' stage is 1280 wide, and its middle stays at 640 however wide the screen is
     constexpr float STAGE_MIDDLE = 640.0f;
 
-    // how much wider than its own pixels a menu's drawn: one stretched to fill the screen ("exactFit", as the staff enchanting mod's
-    // crafting menu) draws its 1280 across the whole width. 1 for the rest. the spots, sliders and layout are in unstretched pixels,
-    // so they're narrowed by it across
+    // how much wider a menu is drawn than its own pixels. a menu stretched to fill the screen ("exactFit", like the staff enchanting
+    // mod's crafting menu) draws its 1280 across the whole width, and every other menu is 1. the spots, sliders and layout are all in
+    // unstretched pixels, so positions across are divided by this
     float stretch = 1.0f;
 
-    // the part of the movie on screen, 720 high, and the menu's stretch. a stretched menu's shape isn't the screen's, so it's not kept
+    // reads the movie's visible area and the menu's stretch. a stretched menu's size isn't stored, as its shape isn't the screen's
     bool GetVisible(RE::GFxMovieView* view, Rect& out)
     {
         RE::GFxValue visible;
@@ -324,7 +325,7 @@ namespace
         return view->GetVariable(&manager, "_global.skyui.util.ConfigManager") && !manager.IsUndefined();
     }
 
-    // SkyUI lays out the card and rotation area as its config loads, setting _config just before
+    // SkyUI lays out the card and rotation area when its config loads, and sets _config just before
     bool IsSkyUIWaiting(RE::GFxMovieView* view)
     {
         RE::GFxValue config;
@@ -348,8 +349,8 @@ namespace
         return false;
     }
 
-    // whether this is the screen shape the spots were saved on. compared loosely, as the settings file rounds the number when it's
-    // saved, so it never comes back exactly the same
+    // whether this is the screen shape the spots were saved on. it's compared loosely because the settings file rounds the number, so
+    // it never comes back exactly the same
     bool IsSpotAspect(float aspect)
     {
         return std::abs(Settings::values.spotAspect - aspect) < 0.001f;
@@ -413,7 +414,7 @@ namespace
     }
 
     // the card moved back onto the menu where it would go off it or under its bottom bar, as it is now: a bench's card is taller with
-    // its ingredients, so placed low in the inventory it would be cut off there. without across, only up and down
+    // its ingredients, so placed low in the inventory it would be cut off there. with across false, it's only kept on screen up and down
     void KeepOnScreen(RE::GFxMovieView* view, RE::GFxValue& clip, float x, float y, float scale, float& toX, float& toY, float toScale,
         bool across = true)
     {
@@ -480,10 +481,10 @@ namespace
         }
     }
 
-    // settled: the menu's laid out, so the item menus' spot can be noted
+    // settled means the menu has finished laying out, so the item menus' spot can be saved
     void UpdateCard(RE::GFxMovieView* view, bool settled)
     {
-        // its size taken up and down, and how much narrower the menu has it across (a stretched menu's), which is kept
+        // its size is read from its height, and any extra narrowing across (a stretched menu's) is kept as it is
         RE::GFxValue clip;
         float x;
         float y;
@@ -495,8 +496,8 @@ namespace
         }
         const float squash = scaleX / scale;
 
-        // a bench's card put on the item menus' spot, sized to match on screen. again once laid out, as a stretched menu's stretch may
-        // only be known by then
+        // a bench's card is put on the item menus' spot, sized to match on screen. this is done again once the menu's laid out, because
+        // a stretched menu may only know its stretch by then
         const auto putOnSpot = [&] {
             float left;
             float top;
@@ -532,7 +533,7 @@ namespace
             card.scale      = scale;
         }
 
-        // the item menus' spot noted, and the card's middle measured again, now it's laid out
+        // now the menu's laid out, save the item menus' spot and measure the card's middle again
         if (settled && !card.spotTaken) {
             card.spotTaken = true;
             if (Rect local; GetParentShift(view, clip, card.parentShift, &local)) {
@@ -541,7 +542,7 @@ namespace
             }
             card.onSpot = false;
             putOnSpot();
-            // moved back to where the menu put it
+            // the spot is where the menu put the card, before it was moved
             if (Rect now; !IsCraftingMenu(view) && GetBounds(view, clip, now)) {
                 const float dx = card.baseX - x;
                 itemMenuCard = { true, (now.left + now.right) * 0.5f + dx, now.top + card.baseY - y, now.right - now.left };
@@ -549,7 +550,7 @@ namespace
             }
         }
 
-        // positive is right and up. with Auto-Adjustment, the menu's height and size, at the layout's place across
+        // positive is right and up. with Auto-Adjustment, the card keeps the menu's height and size, and the layout places it across
         const auto& values = Settings::values;
         float toScale = card.baseScale * CardScale();
         float toX     = card.baseX + values.itemCardX / stretch;
@@ -614,7 +615,7 @@ namespace
             }
         }
 
-        // the item menus' spot noted, now it's laid out
+        // now the menu's laid out, save the item menus' spot
         if (settled && !area.spotTaken && !IsCraftingMenu(view)) {
             area.spotTaken = true;
             itemMenuArea   = { true, area.baseX, area.baseY, area.baseWidth, area.baseHeight };
@@ -627,7 +628,7 @@ namespace
         float toX      = area.baseX + values.itemPreviewX / stretch - (toWidth - area.baseWidth) * 0.5f;
         float toY      = area.baseY - values.itemPreviewY - (toHeight - area.baseHeight) * 0.5f;
 
-        // with Auto-Adjustment, sized and moved with the preview
+        // with Auto-Adjustment, it's sized and moved to match the preview
         float parentShift;
         Rect visible;
         if (IsAutoAdjust() && GetVisible(view, visible) && GetParentShift(view, clip, parentShift)) {
@@ -673,7 +674,7 @@ namespace
 
     void UpdatePreview()
     {
-        // positive is right and up, a lower x further right. with Auto-Adjustment, the layout's
+        // positive is right and up, and a lower x is further right. with Auto-Adjustment, the layout's values are used instead
         const auto& values  = Settings::values;
         const float offsetX = -values.itemPreviewX / PIXELS_PER_UNIT;
         const float offsetZ = values.itemPreviewY / PIXELS_PER_UNIT;
@@ -766,7 +767,7 @@ namespace
 
 namespace
 {
-    // an item menu's opened since the last update
+    // set when an item menu opens, so the next update starts fresh
     std::atomic_bool menuOpened = true;
 }
 
@@ -787,7 +788,7 @@ namespace ItemDisplay
             return;
         }
 
-        // a vanilla menu lays itself out over its first frames, SkyUI's once its config is in. each menu opened starts afresh
+        // a vanilla menu lays itself out over its first frames, and SkyUI's once its config loads. each menu that opens starts fresh
         constexpr int SETTLE_FRAMES = 10;
         static RE::GFxMovieView* settling = nullptr;
         static int frames = 0;
@@ -800,15 +801,15 @@ namespace ItemDisplay
             rotationArea = {};
         }
 
-        // the menu's stretch, before anything's placed by it
+        // read the menu's stretch first, as everything below is placed by it
         if (Rect visible; !GetVisible(view, visible)) {
             stretch = 1.0f;
         }
 
-        // the preview from the first frame, as it's the game's settings rather than the menu's layout
+        // the preview is placed from the first frame, as it uses the game's settings rather than the menu's layout
         UpdatePreview();
 
-        // with Auto-Adjustment, the card and area too, as their place across doesn't depend on the menu's
+        // with Auto-Adjustment, the card and area are too, as their position across doesn't depend on the menu's layout
         constexpr int GIVE_UP_FRAMES = 600;
         if (!ready) {
             const bool waiting = IsSkyUI(view) ? IsSkyUIWaiting(view) : frames < SETTLE_FRAMES;

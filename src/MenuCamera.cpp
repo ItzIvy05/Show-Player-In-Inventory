@@ -18,7 +18,7 @@ namespace
     constexpr float FRAMING_TOP    = 1.0f;
     constexpr float FRAMING_BOTTOM = -0.9f;
 
-    // where the item list ends when it can't be read (a bench's), as a share of a 16:9 screen's width
+    // where the item list ends when it can't be read (at a bench), as a share of a 16:9 screen's width
     constexpr float DEFAULT_LIST_EDGE = 0.45f;
 
     // how far across from the list the player's framed at 16:9 (0 at its edge, 1 at the screen's), and at a workbench with its own
@@ -146,7 +146,7 @@ namespace
             .value();
     }
 
-    // the frame shift's own part on wider screens: for 21:9 (43:18), more outside the crafting menu, and more again for 32:9
+    // the automatic frame shift on wider screens: a base amount for 21:9 (43:18), extra outside crafting menus, and more for 32:9
     constexpr float WIDE_FRAME_SHIFT       = -0.5f;
     constexpr float WIDE_FRAME_SHIFT_ITEMS = -0.2f;
     constexpr float WIDE_FRAME_SHIFT_SUPER = -0.4f;
@@ -477,12 +477,12 @@ namespace
         return furniture;
     }
 
-    // how a workbench is shown: the grindstone, a free-standing alchemy lab or enchanter, and any other bench without its own camera get
-    // one set by hand (shot), unframed. any other starts from its camera turned 45 degrees anticlockwise round the player (25 at a desk's
-    // alchemy lab or enchanter, framed chest up) and eases into the framing, near the list
+    // how a workbench is shown. the grindstone, a freestanding alchemy lab or enchanter, and any other bench without its own camera get
+    // a hand-set view (shot) with no framing. the rest start from their camera, turned 45 degrees anticlockwise around the player (25
+    // for an alchemy lab or enchanter on a desk, framed from the chest up), and ease into the framing near the list
     struct BenchView
     {
-        RE::NiTransform game;    // the game's camera as the menu opened
+        RE::NiTransform game;  // the game's camera as the menu opened
         std::optional<BenchShot> shot;
         bool ownCamera = false;  // the bench animation's
         bool desk = false;       // an alchemy lab or enchanter on a desk
@@ -491,7 +491,7 @@ namespace
     RE::TESObjectREFR* RefOf(RE::TESObjectREFR* ref) { return ref; }
     RE::TESObjectREFR* RefOf(RE::TESObjectREFR& ref) { return &ref; }
 
-    // the nearest staff enchanter in reach, for the staff enchanting mod's menu, which opens in place of using it
+    // finds the nearest staff enchanter in reach, as the staff enchanting mod opens its menu without the player using the bench
     RE::TESFurniture* FindStaffEnchanter(RE::PlayerCharacter* player, RE::NiPointer<RE::TESObjectREFR>* ref)
     {
         constexpr float REACH = 300.0f;
@@ -535,7 +535,7 @@ namespace
         if (furniture) {
             const auto type = static_cast<BenchType>(furniture->workBenchData.benchType.underlying());
             const bool alchemy = type == BenchType::kAlchemy || type == BenchType::kAlchemyExperiment;
-            // Dragonborn's staff enchanter is a create-object bench, known by the keyword its recipes need, and shown as an enchanter is
+            // Dragonborn's staff enchanter is a create-object bench, so it's found by its recipes' keyword and treated as an enchanter
             const bool staff      = furniture->HasKeywordString("DLC2StaffEnchanter");
             const bool enchanting = type == BenchType::kEnchanting || type == BenchType::kEnchantingExperiment || staff;
             const float bottom = bench->GetPositionZ() + static_cast<float>(furniture->boundData.boundMin.z) * bench->GetScale();
@@ -781,7 +781,7 @@ namespace
         static inline REL::Relocation<decltype(AdvanceMovie)> _AdvanceMovie;
     };
 
-    // the staff enchanting mod's crafting menu, a class of its own in its own plugin, so hooked through its vtable as it first opens
+    // the staff enchanting mod's crafting menu is its own class in its own plugin, so its vtable is hooked when it first opens
     struct StaffMenuHook
     {
         using AdvanceMovieFunc = void (*)(RE::IMenu*, float, std::uint32_t);
@@ -877,7 +877,7 @@ void MenuCamera::InstallHooks()
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
 }
 
-// a mod's menu with a class of its own, hooked as it first opens
+// hooks a mod's menu that has a class of its own, when it first opens
 void MenuCamera::HookMenu(std::string_view menuName)
 {
     if (menuName == Settings::STAFF_CRAFTING_MENU) {
@@ -1726,4 +1726,4 @@ void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)
 void MenuCamera::OnCameraTakenOver()
 {
     logger::info("[MenuCamera] Another plugin took the camera.");
-}
+}

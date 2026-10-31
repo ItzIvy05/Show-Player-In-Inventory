@@ -359,7 +359,7 @@ namespace
             if (apparelPreview) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
-            // set by Auto-Adjustment while it's on
+            // these are set by Auto-Adjustment while it's on
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 FUCK::Indent();
                 FUCK::BeginDisabled(values.autoAdjust);

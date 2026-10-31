@@ -30,7 +30,7 @@ namespace Settings
         // how much the player's moved horizontally, away from the item list
         float frameShift       = 0.0f;
 
-        // the card and 3D item placed and sized for the screen's shape, the sliders for them left aside
+        // the card and 3D item are placed and sized for the screen's shape, ignoring their sliders
         bool autoAdjust        = true;
 
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
@@ -57,10 +57,10 @@ namespace Settings
     void Save();
     [[nodiscard]] bool IsWatchedMenu(std::string_view menuName);
 
-    // the staff enchanting mod's crafting menu, a class of its own
+    // the staff enchanting mod's crafting menu, which is a class of its own
     inline constexpr std::string_view STAFF_CRAFTING_MENU = "StaffCraftingMenu";
 
-    // the game's crafting menu or the staff enchanting mod's
+    // whether it's the game's crafting menu or the staff enchanting mod's
     [[nodiscard]] bool IsCraftingMenu(std::string_view menuName);
 
     // the follower whose inventory is open, shown in the player's place, or nullptr
