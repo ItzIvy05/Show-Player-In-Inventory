@@ -960,7 +960,10 @@ void MenuCamera::Start(std::string_view menuName)
     const bool crafting = Settings::IsCraftingMenu(menuName);
     const bool atFurnitureCamera = camera->currentState->id == RE::CameraState::kFurniture;
     const bool ownCamera = camera->IsInFreeCameraMode() || (atFurnitureCamera && !crafting);
-    if (!allowed || ownCamera) {
+    // nor while a script holds the view, as in a scene
+    const auto* controls = RE::PlayerControls::GetSingleton();
+    const bool scripted = controls && controls->data.povScriptMode;
+    if (!allowed || ownCamera || scripted) {
         return;
     }
     furnitureBase = atFurnitureCamera;

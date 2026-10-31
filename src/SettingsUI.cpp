@@ -397,7 +397,7 @@ namespace
             EndSection();
 
             BeginSection("$SPII_ResetSection"_T);
-            FUCK::BeginDisabled(!camera->HasCamera());
+            FUCK::BeginDisabled(!FUCK::IsCameraModified(camera));
             if (FUCK::Button("$SPII_ResetCamera"_T)) {
                 camera->ResetCamera();
             }
@@ -411,6 +411,7 @@ namespace
                 EventProcessor::GetSingleton()->ApplyLiveSettings();
                 camera->ApplyAnimation();
                 camera->ApplyFraming();
+                camera->ResetCamera();
             }
             FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
             EndSection();
