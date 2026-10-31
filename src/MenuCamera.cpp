@@ -1242,14 +1242,12 @@ void MenuCamera::Start(std::string_view menuName)
         options.framingMargin = CLOSE_WORK_MARGIN;
     }
     framingMargin = options.framingMargin;
-    options.startFramed = !bench;
+    // framed from the start unless a bench's own view is placed, so it's what a reset goes back to
+    options.startFramed = !bench || !bench->shot;
     options.framingRect = GetFraming(GetListEdge(), benchFraming);
 
     if (!FUCK::BeginCameraSession(options)) {
         logger::warn("[MenuCamera] FUCK's camera wouldn't start.");
-    }
-    if (bench && !bench->shot) {
-        FUCK::SetCameraBodyFraming(this, true, options.framingRect, options.framingMargin);
     }
 
     active = true;
