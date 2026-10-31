@@ -1247,9 +1247,9 @@ void MenuCamera::Start(std::string_view menuName)
     active = true;
     ApplyAnimation();
 
-    if (!Settings::values.tutorialSeen) {
-        SettingsUI::ShowControls();
-    }
+    // defer the tutorial until the initial framing updates finish
+    tutorialPending = !Settings::values.tutorialSeen;
+    tutorialFrames = 0;
 }
 
 void MenuCamera::Stop()
@@ -1259,6 +1259,9 @@ void MenuCamera::Stop()
     }
 
     active = false;
+    tutorialPending = false;
+    tutorialFrames = 0;
+    SettingsUI::HideControls();
     mouseOnList = false;
     SetFrozen(false);
 
@@ -1400,6 +1403,11 @@ void MenuCamera::Update(float interval)
     // after the menu, so the camera frames this frame's pose. with skyrim souls FUCK also keeps it on top of the game's own camera
     FUCK::UpdateCamera(this, interval);
 
+    // let the native menu entrance animation finish before the controls overlay appears
+    if (tutorialPending && HasCamera() && ++tutorialFrames >= 12) {
+        tutorialPending = false;
+        SettingsUI::ShowControls();
+    }
 
     // once the camera is placed, so it's what this frame sees from. a hidden player is hidden again after, in case anything shows them
     if (!keepObstructions) {
@@ -1726,4 +1734,4 @@ void MenuCamera::OnCameraUpdate(FUCK::CameraControlState& state, float)
 void MenuCamera::OnCameraTakenOver()
 {
     logger::info("[MenuCamera] Another plugin took the camera.");
-}
+}

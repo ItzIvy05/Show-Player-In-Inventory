@@ -62,7 +62,9 @@ private:
     float benchShiftPlaced = 0.0f;   // the shift it was placed with
     float benchShift       = 0.0f;   // and the shift it's slid to since
     bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed
-    
+    bool  tutorialPending  = false;  // wait for initial framing updates
+    int   tutorialFrames   = 0;
+
     std::vector<RE::NiPointer<RE::NiAVObject>> hiddenParts;  // and the parts of them hidden here, to show again
 
     // the menu shown in, and the player shown in a merchant's place while Apparel Preview has something on them

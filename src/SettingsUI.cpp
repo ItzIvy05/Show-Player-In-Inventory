@@ -13,7 +13,13 @@ namespace
     constexpr std::uint32_t LEFT_SHIFT = std::to_underlying(RE::BSWin32KeyboardDevice::Key::kLeftShift);
     // the menus have no keyboard camera controls, so FUCK's help leaves them out
     constexpr auto HELP_FLAGS = FUCK::CameraSessionFlags::kNoKeyboard;
-    constexpr std::array<std::uint32_t, 4> CLOSE_KEYS{ std::to_underlying(RE::BSWin32KeyboardDevice::Key::kEnter), std::to_underlying(RE::BSWin32KeyboardDevice::Key::kEscape), FUCK::Keys::kGP_A, FUCK::Keys::kGP_B };
+
+    constexpr std::array<std::uint32_t, 5> CLOSE_KEYS{
+        std::to_underlying(RE::BSWin32KeyboardDevice::Key::kEscape),
+        std::to_underlying(RE::BSWin32KeyboardDevice::Key::kEnter),
+        std::to_underlying(RE::BSWin32KeyboardDevice::Key::kTab),
+        FUCK::Keys::kGP_A,
+        FUCK::Keys::kGP_B};
 
     bool BeginCheckboxes(const char* id)
     {
@@ -104,14 +110,12 @@ namespace
             const bool appearing = FUCK::IsWindowAppearing();
 
             // FUCK's window background follows the user's transparency, this box stays solid
-            const ImVec2 pos = FUCK::GetWindowPos();
             const ImVec2 size = FUCK::GetWindowSize();
+            const ImVec2 pos = FUCK::GetWindowPos();
             const float border = FUCK::GetStyleVar(ImGuiStyleVar_WindowBorderSize);
             ImVec4 background = FUCK::GetStyleColorVec4(ImGuiCol_WindowBg);
             background.w = 1.0f;
             FUCK::DrawRectFilled(ImVec2(pos.x + border, pos.y + border), ImVec2(pos.x + size.x - border, pos.y + size.y - border), background, FUCK::GetStyleVar(ImGuiStyleVar_WindowRounding));
-            lastPos = pos;
-            lastSize = size;
 
             const bool gamepad = FUCK::GetInputDevice() == FUCK::InputDevice::kGamepad;
             const Icon dragIcon = KeyIcon(FUCK::Keys::kIcon_MouseMove);
@@ -160,13 +164,13 @@ namespace
                 FUCK::DrawCameraHelpMarker(HELP_FLAGS);
             }
 
-            FUCK::Spacing();
+            FUCK::Dummy(ImVec2(0.0f, FUCK::Scale(14.0f)));
 
-            const char* ok = "$SPII_OK"_T;
+            const char* ok = "$SPII_Confirm"_T;
             const float width = FUCK::CalcTextSize(ok).x + FUCK::GetStyleVarVec(ImGuiStyleVar_FramePadding).x * 2.0f;
             FUCK::SetCursorPosX((size.x - width) * 0.5f);
             if (FUCK::Button(ok)) {
-                SetOpen(false);
+                Acknowledge();
             }
 
             FUCK::SetItemDefaultFocus();
@@ -180,35 +184,28 @@ namespace
         void SetOpen(bool a_open) override
         {
             visible = a_open;
-            if (!a_open && !Settings::values.tutorialSeen) {
-                Settings::values.tutorialSeen = true;
-                Settings::Save();
-            }
+        }
+
+        ImVec2 GetDefaultSize() const override
+        {
+            return FUCK::Scale(POPUP_WIDTH, 0.0f);
         }
 
         FUCK::WindowFlags GetFlags() const override
         {
-            auto flags = FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kAutoResize | FUCK::WindowFlags::kNoResize | FUCK::WindowFlags::kCloseOnEsc;
-
-            const ImVec2 mouse = FUCK::GetMousePos();
-            const bool hovered = mouse.x >= lastPos.x && mouse.x <= lastPos.x + lastSize.x && mouse.y >= lastPos.y && mouse.y <= lastPos.y + lastSize.y;
-            if (!hovered && !FUCK::IsAnyItemActive()) {
-                flags = flags | FUCK::WindowFlags::kPassInputToGame;
-            }
-
-            return flags;
-        }
-
-        ImVec2 GetDefaultPos() const override
-        {
-            return ImVec2((FUCK::GetDisplaySize().x - FUCK::Scale(POPUP_WIDTH)) * 0.5f, FUCK::Scale(100.0f));
+            // FUCK queries flags before BeginWindow, so place the auto-sized window by its
+            // centre on that same frame, rather than moving it afterwards
+            const auto screen = FUCK::GetDisplaySize();
+            FUCK::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            return FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kNoResize |
+                   FUCK::WindowFlags::kNoMove | FUCK::WindowFlags::kCustomPosition | FUCK::WindowFlags::kExtendBorder | FUCK::WindowFlags::kAutoResize;
         }
 
         bool OnAsyncInput(const void* a_events) override
         {
             for (const auto key : CLOSE_KEYS) {
                 if (FUCK::IsInputPressed(a_events, key)) {
-                    SetOpen(false);
+                    Acknowledge();
                     return true;
                 }
             }
@@ -217,8 +214,15 @@ namespace
         }
 
     private:
-        ImVec2 lastPos{};
-        ImVec2 lastSize{};
+        void Acknowledge()
+        {
+            if (!Settings::values.tutorialSeen) {
+                Settings::values.tutorialSeen = true;
+                Settings::Save();
+            }
+            SetOpen(false);
+        }
+
         std::atomic_bool visible = false;
     };
 
@@ -435,4 +439,9 @@ namespace SettingsUI
     {
         ControlsWindow::GetSingleton()->SetOpen(true);
     }
-}
+
+    void HideControls()
+    {
+        ControlsWindow::GetSingleton()->SetOpen(false);
+    }
+}
