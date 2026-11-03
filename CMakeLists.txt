@@ -7,7 +7,7 @@ endif()
 set(AUTHOR_NAME "Ivy")
 set(PRODUCT_NAME "ShowPlayerInInventory")
 set(PLUGIN_OUTPUT_NAME "ShowPlayerInInventory")
-project(${PRODUCT_NAME} VERSION 2.4.0.0 LANGUAGES CXX)
+project(${PRODUCT_NAME} VERSION 3.0.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,7 +31,9 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in" "${CMAKE_CURREN
 set(IVY_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/EventProcessor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ItemDisplay.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/MenuCamera.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Obstructions.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Settings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsUI.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ViewSwitchFix.cpp"
@@ -40,7 +42,9 @@ set(IVY_SOURCES
 
 set(IVY_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/EventProcessor.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/ItemDisplay.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/MenuCamera.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Obstructions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/PCH.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Settings.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/SettingsUI.h"

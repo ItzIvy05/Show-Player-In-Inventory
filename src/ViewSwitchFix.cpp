@@ -11,14 +11,19 @@ namespace
 
     void ReapplyAttachment(RE::PlayerCharacter* player, bool drawn)
     {
+        bool weapon = false;
         for (const bool leftHand : { false, true }) {
             auto* object = player->GetEquippedObject(leftHand);
             if (object && object->IsWeapon()) {
                 REL::RelocateVirtual<void(RE::PlayerCharacter*, RE::TESForm*, bool, bool)>(SET_WEAPON_ATTACHED, SET_WEAPON_ATTACHED, player, object, drawn, leftHand);
+                weapon = true;
             }
         }
 
-        REL::RelocateVirtual<void(RE::ActorState*, bool)>(FINISH_WEAPON_TRANSITION, FINISH_WEAPON_TRANSITION, player->AsActorState(), drawn);
+        // only with a weapon in hand, as finishing the transition again readies a spell again too, replaying its equip sound
+        if (weapon) {
+            REL::RelocateVirtual<void(RE::ActorState*, bool)>(FINISH_WEAPON_TRANSITION, FINISH_WEAPON_TRANSITION, player->AsActorState(), drawn);
+        }
 
         if (!drawn) {
             return;

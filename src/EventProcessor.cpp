@@ -1,5 +1,6 @@
 #include "EventProcessor.h"
 
+#include "ItemDisplay.h"
 #include "MenuCamera.h"
 #include "Settings.h"
 
@@ -7,11 +8,28 @@ namespace
 {
     std::atomic_bool blurClearQueued = false;
 
+    // the menu's blur taken away, given back if the one shown goes while the menu stays open (the mod turned off)
+    std::uint32_t blurCleared = 0;
+
+    // only while someone is shown, so a menu with the mod off, or one it couldn't start in (mid sit-down, the free or furniture camera), keeps its blur
     void ClearVanillaMenuBlur()
     {
+        if (!MenuCamera::GetSingleton()->IsActive()) {
+            return;
+        }
+
         auto* blur = RE::UIBlurManager::GetSingleton();
         while (blur->blurCount > 0) {
             blur->DecrementBlurCount();
+            ++blurCleared;
+        }
+    }
+
+    void RestoreVanillaMenuBlur()
+    {
+        auto* blur = RE::UIBlurManager::GetSingleton();
+        for (; blurCleared > 0; --blurCleared) {
+            blur->IncrementBlurCount();
         }
     }
 
@@ -42,6 +60,11 @@ void EventProcessor::Register()
 
 void EventProcessor::OnMenu(std::string_view menuName, bool opening)
 {
+    if (opening) {
+        MenuCamera::HookMenu(menuName);
+        ItemDisplay::OnMenuOpen(menuName);
+    }
+
     if (menuName == RE::TweenMenu::MENU_NAME) {
         tweenOpen = opening;
         MenuCamera::GetSingleton()->SetCacheFrozen(tweenOpen || menuOpen);
@@ -57,16 +80,16 @@ void EventProcessor::OnMenu(std::string_view menuName, bool opening)
         }
 
         menuOpen = true;
+        blurCleared = 0;
         MenuCamera::GetSingleton()->SetCacheFrozen(true);
         activeMenu = menuName;
-        logger::info("[EventProcessor] Watched menu opened.");
         ApplyLiveSettings();
         return;
     }
 
     if (menuOpen && menuName == activeMenu) {
-        logger::info("[EventProcessor] Watched menu closed.");
         menuOpen = false;
+        blurCleared = 0;  // the closing menu takes its own blur away, so there's nothing to give back
         QueueStop();
         QueueVanillaMenuBlurClear();
     }
@@ -96,9 +119,9 @@ void EventProcessor::ApplyLiveSettings()
 
     if (Settings::values.enabled) {
         MenuCamera::GetSingleton()->Start(activeMenu);
+        QueueVanillaMenuBlurClear();
     } else {
         MenuCamera::GetSingleton()->Stop();
+        RestoreVanillaMenuBlur();
     }
-
-    QueueVanillaMenuBlurClear();
 }

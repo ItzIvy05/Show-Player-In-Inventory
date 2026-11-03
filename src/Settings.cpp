@@ -2,19 +2,42 @@
 
 namespace
 {
+    // raised when a release should start everyone's settings afresh. 3 is 3.0.0, which reworked them
+    constexpr int  VERSION = 3;
+    constexpr auto SECTION = "General";
+
     // the settings and their ini keys. defaults come from Values, and only values that differ are written
-    const FUCK::INI::Fields<Settings::Values> FIELDS{ "General", {
-        { "bEnable", &Settings::Values::enabled },
-        { "bMagicMenu", &Settings::Values::magicMenu },
-        { "bBarterMenu", &Settings::Values::barterMenu },
-        { "bContainerMenu", &Settings::Values::containerMenu },
-        { "bHideItemPreviews", &Settings::Values::hideItemPreviews },
+    const FUCK::INI::Fields<Settings::Values> FIELDS{ SECTION, {
+        { "bEnable",           &Settings::Values::enabled },
         { "bAnimateCharacter", &Settings::Values::animateCharacter },
-        { "bAllowMovement", &Settings::Values::allowMovement },
-        { "bTurnCharacter", &Settings::Values::turnCharacter },
-        { "bRememberCamera", &Settings::Values::rememberCamera },
-        { "bCameraControls", &Settings::Values::cameraControls },
-        { "bTutorialSeen", &Settings::Values::tutorialSeen },
+        { "bTurnCharacter",    &Settings::Values::turnCharacter },
+        { "bRememberCamera",   &Settings::Values::rememberCamera },
+        { "bRememberFacing",   &Settings::Values::rememberFacing },
+        { "bHideObstructions", &Settings::Values::hideObstructions },
+        { "bSneakVignette",    &Settings::Values::sneakVignette },
+        { "bUpperBody",        &Settings::Values::upperBody },
+        { "bCameraControls",   &Settings::Values::cameraControls },
+        { "bTutorialSeen",     &Settings::Values::tutorialSeen },
+        { "fItemCardX",        &Settings::Values::itemCardX },
+        { "fItemCardY",        &Settings::Values::itemCardY },
+        { "fItemCardScale",    &Settings::Values::itemCardScale },
+        { "fItemPreviewX",     &Settings::Values::itemPreviewX },
+        { "fItemPreviewY",     &Settings::Values::itemPreviewY },
+        { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
+        { "fBenchLabelX",      &Settings::Values::benchLabelX },
+        { "bAutoAdjust",       &Settings::Values::autoAdjust },
+        { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
+        { "fFrameShift",       &Settings::Values::frameShift },
+        { "fSpotAspect",       &Settings::Values::spotAspect },
+        { "fCardSpotX",        &Settings::Values::cardSpotX },
+        { "fCardSpotTop",      &Settings::Values::cardSpotTop },
+        { "fCardSpotWidth",    &Settings::Values::cardSpotWidth },
+        { "fAreaSpotX",        &Settings::Values::areaSpotX },
+        { "fAreaSpotY",        &Settings::Values::areaSpotY },
+        { "fAreaSpotWidth",    &Settings::Values::areaSpotWidth },
+        { "fAreaSpotHeight",   &Settings::Values::areaSpotHeight },
+        { "fBottomLimit",      &Settings::Values::bottomLimit },
+        { "iVersion",          &Settings::Values::version },
     } };
 
     FUCK::PluginSettings& GetINI()
@@ -28,16 +51,35 @@ namespace Settings
 {
     void SetDefaults()
     {
-        // the tutorial has been seen either way
-        const bool seen = values.tutorialSeen;
+        // the tutorial has been seen either way, and the version, the item menus' spots and the bench's requirements stay
+        const Values kept = values;
         values = {};
-        values.tutorialSeen = seen;
+        values.version        = VERSION;
+        values.tutorialSeen   = kept.tutorialSeen;
+        values.spotAspect     = kept.spotAspect;
+        values.cardSpotX      = kept.cardSpotX;
+        values.cardSpotTop    = kept.cardSpotTop;
+        values.cardSpotWidth  = kept.cardSpotWidth;
+        values.areaSpotX      = kept.areaSpotX;
+        values.areaSpotY      = kept.areaSpotY;
+        values.areaSpotWidth  = kept.areaSpotWidth;
+        values.areaSpotHeight = kept.areaSpotHeight;
+        values.bottomLimit    = kept.bottomLimit;
     }
 
+    // settings from an older version are cleared
     void Load()
     {
         GetINI().Load(FIELDS, values);
-        logger::info("[Settings] enabled={} animateCharacter={}", values.enabled, values.animateCharacter);
+        if (values.version >= VERSION) {
+            return;
+        }
+
+        GetINI().Save([](CSimpleIniA& ini) { ini.Delete(SECTION, nullptr); });
+        values = {};
+        GetINI().Load(FIELDS, values);
+        values.version = VERSION;
+        Save();
     }
 
     // only what differs from the defaults is written
@@ -48,28 +90,65 @@ namespace Settings
 
     bool IsWatchedMenu(std::string_view menuName)
     {
-        if (menuName == RE::InventoryMenu::MENU_NAME) {
+        if (menuName == RE::InventoryMenu::MENU_NAME ||
+            menuName == RE::MagicMenu::MENU_NAME     ||
+            menuName == RE::BarterMenu::MENU_NAME    ||
+            IsCraftingMenu(menuName)) {
             return true;
         }
 
-        if (menuName == RE::MagicMenu::MENU_NAME) {
-            return values.magicMenu;
-        }
-
-        if (menuName == RE::BarterMenu::MENU_NAME) {
-            return values.barterMenu;
-        }
-
-        // chests and other containers only. an actor's inventory is a body, a pickpocket or a follower, where showing the player isn't much use
+        // chests, bodies and other containers, and a living actor's inventory when it's a follower's or being pickpocketed. anyone else's (a
+        // mod opening it) is left alone
         if (menuName == RE::ContainerMenu::MENU_NAME) {
-            if (!values.containerMenu) {
+            const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
+            if (!target) {
                 return false;
             }
 
-            const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
-            return target && !target->As<RE::Actor>();
+            const auto* actor = target->As<RE::Actor>();
+            return !actor || actor->IsDead() || GetFollower() || GetPickpocketed();
         }
 
         return false;
+    }
+
+    bool IsCraftingMenu(std::string_view menuName)
+    {
+        return menuName == RE::CraftingMenu::MENU_NAME || menuName == STAFF_CRAFTING_MENU;
+    }
+
+    bool CanHideApparelPreviewItems()
+    {
+        const auto size = FUCK::GetDisplaySize();
+        return size.y > 0.0f && size.x / size.y <= 16.0f / 9.0f + 0.001f;
+    }
+
+    bool CanLieDown()
+    {
+        static const bool installed = GetModuleHandleW(L"GoToBed.dll") != nullptr;
+        return installed;
+    }
+
+    // the living actor whose inventory the container menu has open in this mode, or nullptr
+    RE::Actor* GetContainerActor(RE::ContainerMenu::ContainerMode mode)
+    {
+        const auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
+        auto* actor = target ? target->As<RE::Actor>() : nullptr;
+        if (!actor || actor->IsDead() || RE::ContainerMenu::GetContainerMode() != mode) {
+            return nullptr;
+        }
+
+        return actor;
+    }
+
+    // the container menu's NPC mode is a follower's "let's trade", or a mod opening someone's inventory. bodies and pickpocketing have modes of their own
+    RE::Actor* GetFollower()
+    {
+        return GetContainerActor(RE::ContainerMenu::ContainerMode::kNPCMode);
+    }
+
+    RE::Actor* GetPickpocketed()
+    {
+        return GetContainerActor(RE::ContainerMenu::ContainerMode::kPickpocket);
     }
 }
