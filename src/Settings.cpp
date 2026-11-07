@@ -26,16 +26,14 @@ namespace
         { "fItemPreviewScale", &Settings::Values::itemPreviewScale },
         { "fBenchLabelX",      &Settings::Values::benchLabelX },
         { "bAutoAdjust",       &Settings::Values::autoAdjust },
+        { "bAutoAdjustOwn",    &Settings::Values::autoAdjustOwn },
         { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
         { "fFrameShift",       &Settings::Values::frameShift },
+        { "fStartFov",         &Settings::Values::startFov },
         { "fSpotAspect",       &Settings::Values::spotAspect },
         { "fCardSpotX",        &Settings::Values::cardSpotX },
         { "fCardSpotTop",      &Settings::Values::cardSpotTop },
         { "fCardSpotWidth",    &Settings::Values::cardSpotWidth },
-        { "fAreaSpotX",        &Settings::Values::areaSpotX },
-        { "fAreaSpotY",        &Settings::Values::areaSpotY },
-        { "fAreaSpotWidth",    &Settings::Values::areaSpotWidth },
-        { "fAreaSpotHeight",   &Settings::Values::areaSpotHeight },
         { "fBottomLimit",      &Settings::Values::bottomLimit },
         { "iVersion",          &Settings::Values::version },
     } };
@@ -60,10 +58,6 @@ namespace Settings
         values.cardSpotX      = kept.cardSpotX;
         values.cardSpotTop    = kept.cardSpotTop;
         values.cardSpotWidth  = kept.cardSpotWidth;
-        values.areaSpotX      = kept.areaSpotX;
-        values.areaSpotY      = kept.areaSpotY;
-        values.areaSpotWidth  = kept.areaSpotWidth;
-        values.areaSpotHeight = kept.areaSpotHeight;
         values.bottomLimit    = kept.bottomLimit;
     }
 

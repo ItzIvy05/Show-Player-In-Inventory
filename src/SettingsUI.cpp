@@ -1,5 +1,6 @@
 #include "SettingsUI.h"
 #include "EventProcessor.h"
+#include "ItemDisplay.h"
 #include "MenuCamera.h"
 #include "Settings.h"
 
@@ -238,6 +239,40 @@ namespace
         }
     };
 
+    // FUCK's offsets on the framing, as right, forward and up, while a menu's open. then the field of view framed menus open at, which a
+    // framed one shows at once
+    void PositionSliders(MenuCamera* camera)
+    {
+        constexpr float RANGE   = 200.0f;  // game units
+        constexpr float FOV_MIN = 20.0f;
+        constexpr float FOV_MAX = 120.0f;
+
+        FUCK::CameraOffsets offsets;
+        const bool open = camera->HasCamera() && FUCK::GetCameraOffsets(camera, offsets);
+
+        bool changed = false;
+        if (open) {
+            changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -RANGE, RANGE, "%.0f");
+            changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, RANGE, -RANGE, "%.0f");
+            changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -RANGE, RANGE, "%.0f");
+        } else {
+            FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+        }
+
+        if (FUCK::SliderFloat("$SPII_StartFov"_T, &Settings::values.startFov, FOV_MIN, FOV_MAX, "%.0f")) {
+            Settings::Save();
+            if (open && FUCK::IsCameraBodyFramed(camera)) {
+                offsets.fov = Settings::values.startFov;
+                changed = true;
+            }
+        }
+        FUCK::SetTooltip("$SPII_StartFovTT"_T);
+
+        if (changed) {
+            FUCK::SetCameraOffsets(camera, offsets);
+        }
+    }
+
     // live in any item menu open underneath. whole numbers: the position dragged in the movie's pixels, over a whole screen either way,
     // and the size as a percentage, from 1
     void ItemSliders(const char* id, float& x, float& y, float& scale, const char* help)
@@ -358,22 +393,22 @@ namespace
             EndSection();
 
             BeginSection("$SPII_Items"_T);
-            Checkbox("$SPII_AutoAdjust"_T, values.autoAdjust, "$SPII_AutoAdjustTT"_T);
+            Checkbox("$SPII_AutoAdjust"_T, ItemDisplay::AutoAdjustSetting(), "$SPII_AutoAdjustTT"_T);
             static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
             if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
-            // these are set by Auto-Adjustment while it's on
+            // these are set by Auto-Adjustment while it places them
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(values.autoAdjust);
+                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
                 FUCK::EndDisabled();
                 FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(values.autoAdjust);
+                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
                 FUCK::Separator();
                 const ImVec2 screen = FUCK::GetDisplaySize();
@@ -391,9 +426,7 @@ namespace
             BeginSection("$SPII_Adjust"_T);
             if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
                 FUCK::Indent();
-                if (!camera->DrawPositionSliders()) {
-                    FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
-                }
+                PositionSliders(camera);
                 FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_Advanced"_T)) {

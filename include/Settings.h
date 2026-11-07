@@ -31,21 +31,21 @@ namespace Settings
         // how much the player's moved horizontally, away from the item list
         float frameShift       = 0.0f;
 
+        // the field of view framed menus open at, narrower than the game's so the player isn't stretched at the screen's edge
+        float startFov         = 50.0f;
+
         // the card and 3D item are placed and sized for the screen's shape, ignoring their sliders
         bool autoAdjust        = true;
+        bool autoAdjustOwn     = false;  // on themed layouts
 
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
         bool hideAppPrevItems  = false;
 
-        // the item menus' card spot and rotation area as last laid out, on a screen of this shape, for a bench opened before any item menu
+        // the item menus' card spot as last laid out, on a screen of this shape, for a bench opened before any item menu
         float spotAspect       = 0.0f;
         float cardSpotX        = 0.0f;
         float cardSpotTop      = 0.0f;
         float cardSpotWidth    = 0.0f;
-        float areaSpotX        = 0.0f;
-        float areaSpotY        = 0.0f;
-        float areaSpotWidth    = 0.0f;
-        float areaSpotHeight   = 0.0f;
 
         // how far below the card's top a bench's requirements reach, as a share of the card's width, measured at the last bench
         float bottomLimit      = 0.0f;

@@ -42,20 +42,6 @@ namespace
         bool  measuredRequirements = false;  // a bench's requirements measured, once a visit
     };
 
-    struct Area
-    {
-        RE::GFxMovieView* view = nullptr;
-        float baseX      = 0.0f;
-        float baseY      = 0.0f;
-        float baseWidth  = 0.0f;
-        float baseHeight = 0.0f;
-        float x          = 0.0f;
-        float y          = 0.0f;
-        float width      = 0.0f;
-        float height     = 0.0f;
-        bool  spotTaken  = false;  // its base noted as the item menus' spot, once the menu's laid out
-    };
-
     struct Value
     {
         bool  valid = false;
@@ -66,7 +52,7 @@ namespace
     Card card;
 
     float labelBaseX = NAN;  // where the menu put a bench's description
-    Area rotationArea;
+    bool  areaRaised = false;  // the rotation area lifted to the top of the menu
 
     // the card's spot in the item menus as they lay it out, before the offsets, which a bench's card is put on so the sliders place it
     // the same everywhere
@@ -80,17 +66,10 @@ namespace
 
     CardSpot itemMenuCard;
 
-    // and the rotation area's, which a bench's goes on with its preview
-    struct AreaSpot
-    {
-        bool valid   = false;
-        float x      = 0.0f;
-        float y      = 0.0f;
-        float width  = 0.0f;
-        float height = 0.0f;
-    };
-
-    AreaSpot itemMenuArea;
+    // whether the menu's layout is stock enough for Auto-Adjustment. a bench goes by the last item menu's
+    enum class Layout { kUnknown, kStock, kOwn };
+    Layout menuLayout = Layout::kUnknown;
+    Layout itemLayout = Layout::kStock;
 
     // the game's preview settings, read as an item loads, and its preview manager's own copy for the menu open
     enum Axis { kX, kZ, kScale };
@@ -228,7 +207,8 @@ namespace
 
     bool IsAutoAdjust()
     {
-        return Settings::values.autoAdjust;
+        const auto& values = Settings::values;
+        return menuLayout == Layout::kStock ? values.autoAdjust : menuLayout == Layout::kOwn && values.autoAdjustOwn;
     }
 
     bool IsCardSet()
@@ -359,6 +339,45 @@ namespace
         return false;
     }
 
+    // cropped to fill the screen (noBorder, Widescreen Scale Removed)
+    bool IsCropped(RE::GFxMovieView* view)
+    {
+        RE::GFxValue mode;
+        return view->GetVariable(&mode, "Stage.scaleMode") && mode.IsString() && std::string_view(mode.GetString()) == "noBorder";
+    }
+
+    // a layout that moves the card left of the screen's middle, or shrinks it well down, has its own place for it
+    constexpr float STOCK_CARD_WIDTH = 428.5f;
+    constexpr float SMALLEST_CARD    = 0.6f;  // of the stock card's width
+
+    Layout CheckLayout(RE::GFxMovieView* view)
+    {
+        static bool logged = false;
+        const auto own = [](const char* why) {
+            if (!logged && !Settings::values.autoAdjustOwn) {
+                logger::info("[ItemDisplay] Auto-Adjustment is off by default here, as {}.", why);
+                logged = true;
+            }
+            return Layout::kOwn;
+        };
+        if (IsCropped(view)) {
+            return own("the menu is cropped to the screen");
+        }
+
+        RE::GFxValue clip;
+        float cardX;
+        float cardWidth;
+        Rect  visible;
+        if (!GetCard(view, clip) || !GetNumber(clip, "_x", cardX) || !GetNumber(clip, "_width", cardWidth) || !GetVisible(view, visible)) {
+            return own("its card wasn't found");
+        }
+
+        if (cardX + cardWidth * 0.5f < (visible.left + visible.right) * 0.5f || cardWidth < STOCK_CARD_WIDTH * SMALLEST_CARD) {
+            return own("the menu's layout has its own place for the card");
+        }
+        return Layout::kStock;
+    }
+
     // whether this is the screen shape the spots were saved on. it's compared loosely because the settings file rounds the number, so
     // it never comes back exactly the same
     bool IsSpotAspect(float aspect)
@@ -366,26 +385,21 @@ namespace
         return std::abs(Settings::values.spotAspect - aspect) < 0.001f;
     }
 
-    // the item menus' spots kept in the settings, so a bench opened before any item menu still has them. only on the screen they were
+    // the item menus' card spot kept in the settings, so a bench opened before any item menu still has it. only on the screen they were
     // taken on, as the menus lay out by its shape
     void SaveSpots()
     {
         auto& values = Settings::values;
         const float aspect = Aspect();
         const bool same = IsSpotAspect(aspect) && values.cardSpotX == itemMenuCard.centreX && values.cardSpotTop == itemMenuCard.top &&
-                          values.cardSpotWidth == itemMenuCard.width && values.areaSpotX == itemMenuArea.x && values.areaSpotY == itemMenuArea.y &&
-                          values.areaSpotWidth == itemMenuArea.width && values.areaSpotHeight == itemMenuArea.height;
-        if (same || !itemMenuCard.valid || !itemMenuArea.valid) {
+                          values.cardSpotWidth == itemMenuCard.width;
+        if (same || !itemMenuCard.valid) {
             return;
         }
-        values.spotAspect     = aspect;
-        values.cardSpotX      = itemMenuCard.centreX;
-        values.cardSpotTop    = itemMenuCard.top;
-        values.cardSpotWidth  = itemMenuCard.width;
-        values.areaSpotX      = itemMenuArea.x;
-        values.areaSpotY      = itemMenuArea.y;
-        values.areaSpotWidth  = itemMenuArea.width;
-        values.areaSpotHeight = itemMenuArea.height;
+        values.spotAspect    = aspect;
+        values.cardSpotX     = itemMenuCard.centreX;
+        values.cardSpotTop   = itemMenuCard.top;
+        values.cardSpotWidth = itemMenuCard.width;
         Settings::Save();
     }
 
@@ -397,9 +411,6 @@ namespace
         }
         if (!itemMenuCard.valid && values.cardSpotWidth > 0.0f) {
             itemMenuCard = { true, values.cardSpotX, values.cardSpotTop, values.cardSpotWidth };
-        }
-        if (!itemMenuArea.valid && values.areaSpotWidth > 0.0f) {
-            itemMenuArea = { true, values.areaSpotX, values.areaSpotY, values.areaSpotWidth, values.areaSpotHeight };
         }
     }
 
@@ -599,75 +610,60 @@ namespace
         MoveMoreHUD(view, card.x - x, card.y - y, card.scale / scale);
     }
 
-    // SkyUI's area for turning the preview with the mouse, moved and sized round its middle with the preview
-    void UpdateRotationArea(RE::GFxMovieView* view, bool settled)
+    // stock SkyUI's preview: its height and scale settings, how far down the screen its middle sits with them, and an area to fit it
+    constexpr float STOCK_PREVIEW_Z     = 10.625f;
+    constexpr float STOCK_PREVIEW_SCALE = 1.5f;
+    constexpr float STOCK_PREVIEW_DOWN  = 275.0f;
+    constexpr float STOCK_AREA_SIZE     = 250.0f;
+
+    // SkyUI's area for turning and zooming the preview with the mouse, kept over the preview, as SkyUI's follows the card
+    void UpdateRotationArea(RE::GFxMovieView* view)
     {
         RE::GFxValue clip;
-        float x;
-        float y;
-        float width;
-        float height;
-        const bool found = (view->GetVariable(&clip, "_root.Menu_mc.mouseRotationRect") && clip.IsDisplayObject()) ||
-                           (view->GetVariable(&clip, "_root.Menu.MouseRotationRect") && clip.IsDisplayObject());
-        if (!found || !GetNumber(clip, "_x", x) || !GetNumber(clip, "_y", y) || !GetNumber(clip, "_width", width) ||
-            !GetNumber(clip, "_height", height)) {
+        const bool itemMenu = view->GetVariable(&clip, "_root.Menu_mc.mouseRotationRect") && clip.IsDisplayObject();
+        if (!itemMenu && !(view->GetVariable(&clip, "_root.Menu.MouseRotationRect") && clip.IsDisplayObject())) {
             return;
         }
 
-        auto& area = rotationArea;
-        if (area.view != view || x != area.x || y != area.y || width != area.width || height != area.height) {
-            area = { view, x, y, width, height, x, y, width, height };
-            if (IsCraftingMenu(view)) {
-                if (LoadSpots(); itemMenuArea.valid && IsPreviewSet()) {
-                    area.baseX      = STAGE_MIDDLE + (itemMenuArea.x - STAGE_MIDDLE) / stretch;
-                    area.baseY      = itemMenuArea.y;
-                    area.baseWidth  = itemMenuArea.width / stretch;
-                    area.baseHeight = itemMenuArea.height;
-                }
+        auto* manager = RE::Inventory3DManager::GetSingleton();
+        Rect  visible;
+        float shiftX;
+        float shiftY;
+        if (!manager || manager->itemScale <= 0.0f || !GetVisible(view, visible) || !GetParentShift(view, clip, shiftX, nullptr, &shiftY)) {
+            return;
+        }
+
+        // on top, as it only takes the mouse with nothing over it, and some layouts put the card there
+        if (itemMenu && !areaRaised) {
+            areaRaised = true;
+            RE::GFxValue parent;
+            RE::GFxValue depth;
+            if (clip.GetMember("_parent", &parent) && parent.Invoke("getNextHighestDepth", &depth, nullptr, 0) && depth.IsNumber()) {
+                clip.Invoke("swapDepths", nullptr, &depth, 1);
             }
         }
 
-        // now the menu's laid out, save the item menus' spot
-        if (settled && !area.spotTaken && !IsCraftingMenu(view)) {
-            area.spotTaken = true;
-            itemMenuArea   = { true, area.baseX, area.baseY, area.baseWidth, area.baseHeight };
-            SaveSpots();
-        }
+        // a preview unit is as many pixels up as across. a cropped menu's pixels are larger, a stretched one's narrower
+        const float unit    = PREVIEW_SHARE_PER_UNIT * (visible.right - visible.left);
+        const float tall    = (visible.bottom - visible.top) / 720.0f;
+        const float half    = STOCK_AREA_SIZE * tall * manager->itemScale / STOCK_PREVIEW_SCALE * 0.5f;
+        const float middleX = (visible.left + visible.right) * 0.5f - manager->itemPos.x * unit;
+        const float middleY = visible.top + STOCK_PREVIEW_DOWN * tall - (manager->itemPos.z - STOCK_PREVIEW_Z) * unit * stretch;
 
-        const auto& values = Settings::values;
-        float toWidth  = area.baseWidth * PreviewScale();
-        float toHeight = area.baseHeight * PreviewScale();
-        float toX      = area.baseX + values.itemPreviewX / stretch - (toWidth - area.baseWidth) * 0.5f;
-        float toY      = area.baseY - values.itemPreviewY - (toHeight - area.baseHeight) * 0.5f;
+        // zoomed in, the preview fills the screen and the menu fades, so the area does too, as SkyUI only zooms out over it
+        const float zoom = std::clamp(manager->GetRuntimeData().zoomProgress, 0.0f, 1.0f);
+        const Rect  area{ Lerp(middleX - half / stretch, visible.left, zoom) - shiftX, Lerp(middleY - half, visible.top, zoom) - shiftY,
+                          Lerp(middleX + half / stretch, visible.right, zoom) - shiftX, Lerp(middleY + half, visible.bottom, zoom) - shiftY };
 
-        // with Auto-Adjustment, it's sized and moved to match the preview
-        float parentShift;
-        Rect visible;
-        if (IsAutoAdjust() && GetVisible(view, visible) && GetParentShift(view, clip, parentShift)) {
-            const auto  layout = GetAutoLayout();
-            const auto& scale  = previewSettings[9].value;
-            const auto& z      = previewSettings[5].value;
-            const float by     = scale.valid && scale.base > 0.0f ? layout.previewScale / scale.base : 1.0f;
-            const float up     = z.valid ? (layout.previewZ - z.base) * PREVIEW_SHARE_PER_UNIT * (visible.right - visible.left) * stretch : 0.0f;
-            const float middle = (visible.left + visible.right) * 0.5f + layout.previewX / stretch;
-            toWidth  = area.baseWidth * by;
-            toHeight = area.baseHeight * by;
-            toX      = middle - parentShift - toWidth * 0.5f;
-            toY      = area.baseY + area.baseHeight * 0.5f - up - toHeight * 0.5f;
-        }
-        if (toX == x && toY == y && toWidth == width && toHeight == height) {
-            return;
-        }
-
-        clip.SetMember("_x", toX);
-        clip.SetMember("_y", toY);
-        clip.SetMember("_width", toWidth);
-        clip.SetMember("_height", toHeight);
-
-        GetNumber(clip, "_x", area.x);
-        GetNumber(clip, "_y", area.y);
-        GetNumber(clip, "_width", area.width);
-        GetNumber(clip, "_height", area.height);
+        const auto set = [&](const char* member, float value) {
+            if (float now; GetNumber(clip, member, now) && std::abs(now - value) >= 0.5f) {
+                clip.SetMember(member, value);
+            }
+        };
+        set("_x", area.left);
+        set("_y", area.top);
+        set("_width", area.right - area.left);
+        set("_height", area.bottom - area.top);
     }
 
     // the models already loaded keep where they were placed as they loaded, so they're moved by however far the preview's position and
@@ -794,6 +790,11 @@ namespace ItemDisplay
         }
     }
 
+    bool& AutoAdjustSetting()
+    {
+        return itemLayout == Layout::kStock ? Settings::values.autoAdjust : Settings::values.autoAdjustOwn;
+    }
+
     void Update(RE::GFxMovieView* view)
     {
         if (!Settings::values.enabled || !view) {
@@ -811,7 +812,8 @@ namespace ItemDisplay
             ready = false;
             card = {};
             labelBaseX = NAN;
-            rotationArea = {};
+            areaRaised = false;
+            menuLayout = Layout::kUnknown;
         }
 
         // read the menu's stretch first, as everything below is placed by it
@@ -819,10 +821,22 @@ namespace ItemDisplay
             stretch = 1.0f;
         }
 
-        // the preview is placed from the first frame, as it uses the game's settings rather than the menu's layout
-        UpdatePreview();
+        // SkyUI's menus once SkyUI has laid them out
+        if (menuLayout == Layout::kUnknown) {
+            if (IsCraftingMenu(view)) {
+                menuLayout = itemLayout;
+            } else if (!IsSkyUI(view)) {
+                menuLayout = IsCropped(view) ? Layout::kOwn : Layout::kStock;
+            } else if (!IsSkyUIWaiting(view)) {
+                menuLayout = itemLayout = CheckLayout(view);
+            }
+        }
 
-        // with Auto-Adjustment, the card and area are too, as their position across doesn't depend on the menu's layout
+        // the preview and its rotation area from the first frame, as they go by the game's settings
+        UpdatePreview();
+        UpdateRotationArea(view);
+
+        // with Auto-Adjustment, the card is too, as its position across doesn't depend on the menu's layout
         constexpr int GIVE_UP_FRAMES = 600;
         if (!ready) {
             const bool waiting = IsSkyUI(view) ? IsSkyUIWaiting(view) : frames < SETTLE_FRAMES;
@@ -831,7 +845,6 @@ namespace ItemDisplay
                 PlaceMenuDescription(view, false);
                 if (IsAutoAdjust()) {
                     UpdateCard(view, false);
-                    UpdateRotationArea(view, false);
                 }
                 return;
             }
@@ -839,7 +852,6 @@ namespace ItemDisplay
         }
 
         UpdateCard(view, true);
-        UpdateRotationArea(view, true);
         PlaceMenuDescription(view, true);
     }
 

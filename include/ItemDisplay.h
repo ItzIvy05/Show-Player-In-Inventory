@@ -6,4 +6,7 @@ namespace ItemDisplay
     void Update(RE::GFxMovieView* view);
 
     void OnMenuOpen(std::string_view menuName);
+
+    // the Auto-Adjustment setting for the last item menu's layout
+    [[nodiscard]] bool& AutoAdjustSetting();
 }
