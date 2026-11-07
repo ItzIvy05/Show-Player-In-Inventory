@@ -1,5 +1,6 @@
 #include "SettingsUI.h"
 #include "EventProcessor.h"
+#include "ItemDisplay.h"
 #include "MenuCamera.h"
 #include "Settings.h"
 
@@ -392,22 +393,22 @@ namespace
             EndSection();
 
             BeginSection("$SPII_Items"_T);
-            Checkbox("$SPII_AutoAdjust"_T, values.autoAdjust, "$SPII_AutoAdjustTT"_T);
+            Checkbox("$SPII_AutoAdjust"_T, ItemDisplay::AutoAdjustSetting(), "$SPII_AutoAdjustTT"_T);
             static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
             if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
-            // these are set by Auto-Adjustment while it's on
+            // these are set by Auto-Adjustment while it places them
             if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(values.autoAdjust);
+                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
                 FUCK::EndDisabled();
                 FUCK::Unindent();
             }
             if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(values.autoAdjust);
+                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
                 FUCK::Separator();
                 const ImVec2 screen = FUCK::GetDisplaySize();
