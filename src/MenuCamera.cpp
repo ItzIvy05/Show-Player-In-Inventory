@@ -805,8 +805,7 @@ namespace
     };
 
     // thank you myztikrice, from Show Player in Menus
-    // replaces the item preview load, so the preview stays empty while the player is shown. installed only once the option is turned on,
-    // or with Apparel Preview, whose pieces are shown on the player
+    // replaces the item preview load, so the preview stays empty while a piece is previewed on the player. only with Apparel Preview
     struct LoadInventoryItemHook
     {
         static void LoadInventoryItem(RE::Inventory3DManager* a_this, RE::InventoryEntryData* a_entry)
