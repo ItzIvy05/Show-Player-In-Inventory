@@ -30,16 +30,6 @@ namespace
     // where skyui's list panel comes to rest in its menus once it has slid in (InventoryLists.swf: from -100 to 25 as the menu opens)
     constexpr float PANEL_REST_X = 25.0f;
 
-    // how far the position sliders go, in game units
-    constexpr float SLIDER_RANGE = 200.0f;
-
-    // the field of view slider's range, in degrees
-    constexpr float FOV_MIN = 20.0f;
-    constexpr float FOV_MAX = 120.0f;
-
-    // the field of view a framed menu opens at, narrower than the game's so the player isn't stretched at the screen's edge
-    constexpr float FRAMED_FOV = 50.0f;
-
     // someone held by the one shown (carried, or riding behind them) has their 3D closer to them, or to their horse, than two people can
     // stand. measured across the ground, as someone carried sits up at the carrier's arm or shoulder, and only so far up or down, so
     // someone on the floor above or below isn't counted. a 3D further than HELD_REACH from its own actor is posed there by another mod
@@ -1249,7 +1239,7 @@ void MenuCamera::Start(std::string_view menuName)
     options.startFramed = !bench || !bench->shot;
     options.framingRect = GetFraming(GetListEdge(), benchFraming);
     if (options.startFramed)
-        options.startFov = FRAMED_FOV;
+        options.startFov = Settings::values.startFov;
 
     if (!FUCK::BeginCameraSession(options)) {
         logger::warn("[MenuCamera] FUCK's camera wouldn't start.");
@@ -1429,31 +1419,6 @@ void MenuCamera::Update(float interval)
     }
 
     UpdateShade(interval);
-}
-
-// FUCK's offsets on the framing, as right, forward and up, and the field of view, for the settings' sliders
-bool MenuCamera::DrawPositionSliders()
-{
-    FUCK::CameraOffsets offsets;
-    if (!HasCamera() || !FUCK::GetCameraOffsets(this, offsets)) {
-        return false;
-    }
-
-    bool changed = false;
-    changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -SLIDER_RANGE, SLIDER_RANGE, "%.0f");
-    changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, SLIDER_RANGE, -SLIDER_RANGE, "%.0f");
-    changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -SLIDER_RANGE, SLIDER_RANGE, "%.0f");
-
-    // 0 until FUCK knows the game's field of view
-    if (offsets.fov > 0.0f) {
-        changed |= FUCK::SliderFloat("$SPII_SliderFOV"_T, &offsets.fov, FOV_MIN, FOV_MAX, "%.0f");
-    }
-
-    if (changed) {
-        FUCK::SetCameraOffsets(this, offsets);
-    }
-
-    return true;
 }
 
 // freezes or thaws the one shown to match the setting, while a menu is open

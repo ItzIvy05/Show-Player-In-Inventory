@@ -17,7 +17,6 @@ public:
     void        ResetCamera();
     void        ApplyFraming();
     void        ApplyAnimation();
-    bool        DrawPositionSliders();
     void        OnPerspectiveUpdate(bool firstPerson);
     void        SetCacheFrozen(bool frozen);
     

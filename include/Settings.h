@@ -31,6 +31,9 @@ namespace Settings
         // how much the player's moved horizontally, away from the item list
         float frameShift       = 0.0f;
 
+        // the field of view framed menus open at, narrower than the game's so the player isn't stretched at the screen's edge
+        float startFov         = 50.0f;
+
         // the card and 3D item are placed and sized for the screen's shape, ignoring their sliders
         bool autoAdjust        = true;
 
