@@ -37,6 +37,9 @@ namespace
     constexpr float FOV_MIN = 20.0f;
     constexpr float FOV_MAX = 120.0f;
 
+    // the field of view a framed menu opens at, narrower than the game's so the player isn't stretched at the screen's edge
+    constexpr float FRAMED_FOV = 50.0f;
+
     // someone held by the one shown (carried, or riding behind them) has their 3D closer to them, or to their horse, than two people can
     // stand. measured across the ground, as someone carried sits up at the carrier's arm or shoulder, and only so far up or down, so
     // someone on the floor above or below isn't counted. a 3D further than HELD_REACH from its own actor is posed there by another mod
@@ -1245,6 +1248,8 @@ void MenuCamera::Start(std::string_view menuName)
     // framed from the start unless a bench's own view is placed, so it's what a reset goes back to
     options.startFramed = !bench || !bench->shot;
     options.framingRect = GetFraming(GetListEdge(), benchFraming);
+    if (options.startFramed)
+        options.startFov = FRAMED_FOV;
 
     if (!FUCK::BeginCameraSession(options)) {
         logger::warn("[MenuCamera] FUCK's camera wouldn't start.");
