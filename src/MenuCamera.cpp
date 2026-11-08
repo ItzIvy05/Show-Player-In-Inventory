@@ -1,6 +1,5 @@
 #include "MenuCamera.h"
 #include "ItemDisplay.h"
-#include "Obstructions.h"
 #include "SettingsUI.h"
 
 // windows.h macro
@@ -381,7 +380,7 @@ namespace
         for (const float offset : { 0.0f, FRONT_CORNER * side, -FRONT_CORNER * side }) {
             const float out = facing + offset;
             const RE::NiPoint3 reach = chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
-            if (Obstructions::IsLineClear(actor, chest, reach, ignore)) {
+            if (FUCK::IsLineClear(actor, chest, reach, ignore)) {
                 return out;
             }
         }
@@ -433,7 +432,7 @@ namespace
         for (const float offset : { SIDE * frontSide, -SIDE * frontSide, CORNER * frontSide, -CORNER * frontSide, 0.0f }) {
             const float out = toPlayer + offset;
             const RE::NiPoint3 reach = *chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
-            if (offset == 0.0f || Obstructions::IsLineClear(mark, *chest, reach, { mark, player })) {
+            if (offset == 0.0f || FUCK::IsLineClear(mark, *chest, reach, { mark, player })) {
                 AimCamera(camera, *chest, out + RE::NI_PI, PITCH, FRONT_BACK);
                 return;
             }
@@ -997,7 +996,7 @@ void MenuCamera::Start(std::string_view menuName)
 
     // nothing's hidden round a merchant, whose counter is part of the view, nor whoever's pickpocketed, as the player's crept up to them
     // where they can be seen
-    keepObstructions = merchantShown || shownVictim || crafting;
+    const bool keepObstructions = merchantShown || shownVictim || crafting;
 
     // the one shown faces the camera, so their head would turn round to look where it looks
     headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
@@ -1218,7 +1217,7 @@ void MenuCamera::Start(std::string_view menuName)
     // a merchant always, as across a counter they're seen from the chest up, and a desk's alchemy lab or enchanter. never the player shown
     // for Apparel Preview, so the piece is seen whole, nor at other benches
     const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
-    upperBody = shownMerchant || (bench && bench->desk) || (Settings::values.upperBody && !onDragon && !previewShowsPlayer && !crafting);
+    const bool upperBody = shownMerchant || (bench && bench->desk) || (Settings::values.upperBody && !onDragon && !previewShowsPlayer && !crafting);
     if (upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
     }
@@ -1227,6 +1226,11 @@ void MenuCamera::Start(std::string_view menuName)
     // it follows drawing a weapon or crouching too, as idle sway doesn't change the upper body's measure
     if (looting || seated || upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFollowPose;
+    }
+
+    // what stands between the camera and the one shown is hidden, though nothing round a merchant, a victim or a bench
+    if (Settings::values.hideObstructions && !keepObstructions) {
+        options.flags |= FUCK::CameraSessionFlags::kHideObstructions;
     }
     if (holding) {
         options.framingMargin = HOLDING_MARGIN;
@@ -1268,7 +1272,6 @@ void MenuCamera::Stop()
 
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
-    Obstructions::RestoreAll();
     RemoveShade();
     ShowPlayer();
 
@@ -1311,7 +1314,6 @@ void MenuCamera::Stop()
     follower = {};
     merchantShown    = false;
     hidingPlayer     = false;
-    keepObstructions = false;
 
     mount = {};
 
@@ -1410,10 +1412,7 @@ void MenuCamera::Update(float interval)
         SettingsUI::ShowControls();
     }
 
-    // once the camera is placed, so it's what this frame sees from. a hidden player is hidden again after, in case anything shows them
-    if (!keepObstructions) {
-        Obstructions::Update(interval, subject, shown, upperBody);
-    }
+    // a hidden player is hidden again once the camera's placed, in case anything shows them
     if (hidingPlayer) {
         HidePlayer();
     }
