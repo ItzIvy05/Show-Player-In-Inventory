@@ -9,8 +9,26 @@ namespace
     bool lastThirdPerson = false;
     bool perspectiveSeeded = false;
 
-    void ReapplyAttachment(RE::PlayerCharacter* player, bool drawn)
+    std::int16_t GetEquippedItemTypeId(RE::TESForm* a_form)
     {
+        using func_t = decltype(&GetEquippedItemTypeId);
+        static REL::Relocation<func_t> func{ RELOCATION_ID(14125, 14220) };  // TESForm::GetEquippedItemTypeId
+        return func(a_form);
+    }
+
+    // the hand variables finishing the draw sets, without readying the spells again
+    void SetHandGraphVariables(RE::PlayerCharacter* player)
+    {
+        static const RE::BSFixedString magicEquipped{ "iMagicEquipped" };
+        player->SetGraphVariableInt(magicEquipped, player->GetActorRuntimeData().selectedSpells[RE::Actor::SlotTypes::kLeftHand] || player->GetActorRuntimeData().selectedSpells[RE::Actor::SlotTypes::kRightHand]);
+        player->SetGraphVariableInt(RE::FixedStrings::GetSingleton()->iLeftHandEquipped, GetEquippedItemTypeId(player->GetEquippedObject(true)));
+        player->SetGraphVariableInt(RE::FixedStrings::GetSingleton()->iRightHandEquipped, GetEquippedItemTypeId(player->GetEquippedObject(false)));
+    }
+
+    void ReapplyAttachment(RE::PlayerCharacter* player, RE::WEAPON_STATE state)
+    {
+        const bool drawn = state != RE::WEAPON_STATE::kWantToSheathe && state != RE::WEAPON_STATE::kSheathing;
+
         bool weapon = false;
         for (const bool leftHand : { false, true }) {
             auto* object = player->GetEquippedObject(leftHand);
@@ -20,8 +38,10 @@ namespace
             }
         }
 
-        // only with a weapon in hand, as finishing the transition again readies a spell again too, replaying its equip sound
-        if (weapon) {
+        // finishing the transition readies a spell again too, replaying its equip sound, so a finished draw only gets its hand variables back
+        if (weapon && state == RE::WEAPON_STATE::kDrawn) {
+            SetHandGraphVariables(player);
+        } else if (weapon) {
             REL::RelocateVirtual<void(RE::ActorState*, bool)>(FINISH_WEAPON_TRANSITION, FINISH_WEAPON_TRANSITION, player->AsActorState(), drawn);
         }
 
@@ -59,7 +79,7 @@ namespace
                 return;
             }
 
-            ReapplyAttachment(a_this, state != RE::WEAPON_STATE::kWantToSheathe && state != RE::WEAPON_STATE::kSheathing);
+            ReapplyAttachment(a_this, state);
         }
 
         static inline REL::Relocation<decltype(Update)> _Update;
