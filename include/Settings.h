@@ -76,6 +76,9 @@ namespace Settings
     // whoever's being pickpocketed, shown in the player's place, or nullptr
     [[nodiscard]] RE::Actor* GetPickpocketed();
 
+    // a mannequin, which opens its inventory as a follower does. framed like one, but left in its pose: not turned or animated
+    [[nodiscard]] bool IsManakin(const RE::Actor* actor);
+
     // whether GoToBed is installed, which lies the player down in a bed. without it a bed goes straight to the sleep menu
     [[nodiscard]] bool CanLieDown();
 }

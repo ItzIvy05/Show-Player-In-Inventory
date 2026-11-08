@@ -987,10 +987,10 @@ void MenuCamera::Start(std::string_view menuName)
     followerAngleZ = shownOther ? shownOther->GetAngleZ() : 0.0f;
     auto* subject = shownOther ? shownOther : static_cast<RE::Actor*>(player);
 
-    // the player out of the way of a merchant, as they stand right in front. not pickpocketing, where they're seen sneaking up, and can
-    // follow someone walking off with skyrim souls
+    // the player out of the way of a merchant or follower shown, as they stand right in front. not pickpocketing, where they're seen
+    // sneaking up, and can follow someone walking off with skyrim souls
     merchantShown = shownMerchant != nullptr;
-    hidingPlayer = merchantShown;
+    hidingPlayer = merchantShown || shownFollower;
     if (hidingPlayer) {
         HidePlayer();
     }
@@ -1122,7 +1122,8 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    const bool turnCharacter = !shownMerchant && !crafting && !riding && !holding && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool turnCharacter = !shownMerchant && !crafting && !riding && !holding && !Settings::IsManakin(shownFollower) &&
+                               (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = !shownMerchant && !crafting && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
@@ -1629,10 +1630,14 @@ void MenuCamera::ShowPlayer()
     hiddenParts.clear();
 }
 
-// whether this frame's animation is run here for someone shown: not for a held animal another mod poses itself, nor for the one holding
-// it, as that mod poses their arms round it too
+// whether this frame's animation is run here for someone shown: not for a mannequin, held in its pose, nor a held animal another mod poses
+// itself, nor for the one holding it, as that mod poses their arms round it too
 bool MenuCamera::IsAnimatedHere(RE::Actor* actor) const
 {
+    if (Settings::IsManakin(actor)) {
+        return false;
+    }
+
     const auto posedBy = [&](const Held& one) { return !one.animated && (actor == GetSubject() || one.actor.get().get() == actor); };
     return std::ranges::none_of(held, posedBy);
 }

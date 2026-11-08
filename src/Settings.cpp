@@ -145,4 +145,11 @@ namespace Settings
     {
         return GetContainerActor(RE::ContainerMenu::ContainerMode::kPickpocket);
     }
+
+    bool IsManakin(const RE::Actor* actor)
+    {
+        constexpr RE::FormID MANAKIN_RACE = 0x0010760A;  // Skyrim.esm's ManakinRace
+        const auto* race = actor ? actor->GetRace() : nullptr;
+        return race && race->GetFormID() == MANAKIN_RACE;
+    }
 }
