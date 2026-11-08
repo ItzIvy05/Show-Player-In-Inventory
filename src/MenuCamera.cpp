@@ -1243,10 +1243,8 @@ void MenuCamera::Stop()
     benchShiftScale = 0.0f;
     if (!restarting) {
         previewShowsPlayer = false;
-        FUCK::SetItemPreviewHidden(false);
         previewOffFor      = 0.0f;
-        cardHidden         = false;
-        moreHUDHidden      = false;
+        FUCK::SetItemPreviewHidden(false);
     }
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
@@ -1400,7 +1398,6 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewOffFor = 0.0f;
         Restart();
         FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
-        HideItemCards(true);
         return true;
     }
 
@@ -1408,71 +1405,15 @@ bool MenuCamera::FollowApparelPreview(float interval)
     if (previewShowsPlayer && previewOffFor >= BACK_AFTER) {
         previewShowsPlayer = false;
         FUCK::SetItemPreviewHidden(false);
-        HideItemCards(false);
         Restart();
         return true;
     }
 
-    // each frame, after the menu's own update, as the card fades itself back in as the selection changes, and the setting can change
+    // each frame, as the setting can change
     if (previewShowsPlayer) {
         FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
-        HideItemCards(true);
     }
     return false;
-}
-
-// the item cards out of the way of the piece being previewed: faded out with the menu's own fade, which the next row highlighted brings
-// back, and what holds the card hidden too, so that fade can't show it for a frame
-void MenuCamera::HideItemCards(bool hide)
-{
-    // with the setting turned off mid-preview, they wait for the item to load back at the next row highlighted, as on leaving the preview
-    if (hide && !HideApparelPreviewItems()) {
-        auto* models = RE::Inventory3DManager::GetSingleton();
-        if ((cardHidden || moreHUDHidden) && models && models->GetRuntimeData().loadedModels.empty()) {
-            return;
-        }
-        hide = false;
-    }
-
-    const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
-    if (!view) {
-        cardHidden = false;
-        moreHUDHidden = false;
-        return;
-    }
-
-    const auto setVisible = [hide](RE::GFxValue& clip, bool& hidden) {
-        RE::GFxValue::DisplayInfo info;
-        clip.GetDisplayInfo(&info);
-        if (hide && info.GetVisible()) {
-            info.SetVisible(false);
-            clip.SetDisplayInfo(info);
-            hidden = true;
-        } else if (!hide && hidden) {
-            info.SetVisible(true);
-            clip.SetDisplayInfo(info);
-            hidden = false;
-        }
-    };
-
-    RE::GFxValue card;
-    RE::GFxValue holder;
-    if (view->GetVariable(&card, "_root.Menu_mc.itemCard") && card.IsDisplayObject() && card.GetMember("_parent", &holder) &&
-        holder.IsDisplayObject()) {
-        setVisible(holder, cardHidden);
-    } else if (view->GetVariable(&card, "_root.Menu_mc.ItemCard_mc") && card.IsDisplayObject()) {
-        setVisible(card, cardHidden);
-    }
-    if (hide && card.IsDisplayObject()) {
-        card.Invoke("FadeOutCard");
-        RE::GFxValue faded{ false };
-        view->SetVariable("_root.Menu_mc._bItemCardFadedIn", faded, RE::GFxMovie::SetVarType::kNormal);
-    }
-
-    RE::GFxValue moreHUD;
-    if (view->GetVariable(&moreHUD, "_root.AHZItemCardContainer") && moreHUD.IsDisplayObject()) {
-        setVisible(moreHUD, moreHUDHidden);
-    }
 }
 
 // shows someone else in the same menu: everything goes back, then is set up again, staying in third person between. the first-person cache

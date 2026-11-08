@@ -33,7 +33,6 @@ private:
 
     void SetFrozen(bool freeze);
     bool FollowApparelPreview(float interval);
-    void HideItemCards(bool hide);
     void UpdateShade(float interval);
     void RemoveShade();
     void Restart();
@@ -69,8 +68,6 @@ private:
     bool  previewShowsPlayer = false;
     float previewOffFor      = 0.0f;
     bool  restarting         = false;
-    bool  cardHidden         = false;  // the item card hidden for it, to show again
-    bool  moreHUDHidden      = false;  // moreHUD's item card hidden for it, to show again
 
     // the darkness round the menu while sneaking unseen
     bool  shadeAllowed = false;  // not in barter or a follower's inventory, where it's no secret
