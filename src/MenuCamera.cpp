@@ -1425,7 +1425,12 @@ bool MenuCamera::FollowApparelPreview(float interval)
 // back, and what holds the card hidden too, so that fade can't show it for a frame
 void MenuCamera::HideItemCards(bool hide)
 {
+    // with the setting turned off mid-preview, they wait for the item to load back at the next row highlighted, as on leaving the preview
     if (hide && !HideApparelPreviewItems()) {
+        auto* models = RE::Inventory3DManager::GetSingleton();
+        if ((cardHidden || moreHUDHidden) && models && models->GetRuntimeData().loadedModels.empty()) {
+            return;
+        }
         hide = false;
     }
 
