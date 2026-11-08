@@ -22,7 +22,6 @@ public:
     
     [[nodiscard]] bool IsActive() const;
     [[nodiscard]] bool HasCamera();
-    [[nodiscard]] bool IsPreviewShowingPlayer() const { return previewShowsPlayer; }
 
     // the one shown: the player, or the follower whose inventory is open
     [[nodiscard]] RE::Actor* GetSubject() const;
@@ -103,7 +102,6 @@ private:
     bool active            = false;
     bool cachedFirstPerson = false;
     bool cacheFrozen       = false;
-    bool headTrackingWasOn = false;
     bool playerFrozen      = false;
 
     bool firstPersonAfterBench = false;  // back to first person once the player's left a workbench

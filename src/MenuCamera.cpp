@@ -184,26 +184,6 @@ namespace
                IsCursorOverList<RE::ContainerMenu>(ui) ;
     }
 
-    // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
-    // reloading, e.g. a hair with physics, can pick a target up again. the graph's bHeadTracking only reports what it's doing
-    void HoldHeadStill(RE::Actor* actor)
-    {
-        actor->AsActorState()->actorState2.headTracking = false;
-
-        auto* process = actor->GetActorRuntimeData().currentProcess;
-        auto* high = process ? process->high : nullptr;
-        if (!high) {
-            return;
-        }
-
-        using HeadTrack = RE::HighProcessData::HEAD_TRACK_TYPE;
-        for (std::uint32_t i = 0; i < HeadTrack::kTotal; ++i) {
-            if (high->headTrackTarget[i]) {
-                high->ClearHeadtrackTarget(static_cast<HeadTrack>(i), false);
-            }
-        }
-    }
-
     // the face as the menu caught it. expression mods run on papyrus, which stops in a paused menu, so a face caught mid-blink or mid-expression
     // would hold for the whole menu. it eases to neutral with the eyes open instead, and goes back as it was after. thank you to Menu Studio again
     struct SavedFace
@@ -803,37 +783,6 @@ namespace
         static inline AdvanceMovieFunc _AdvanceMovie = nullptr;
     };
 
-    // thank you myztikrice, from Show Player in Menus
-    // replaces the item preview load, so the preview stays empty while a piece is previewed on the player. only with Apparel Preview
-    struct LoadInventoryItemHook
-    {
-        static void LoadInventoryItem(RE::Inventory3DManager* a_this, RE::InventoryEntryData* a_entry)
-        {
-            auto* object = a_entry ? a_entry->GetObject() : nullptr;
-            auto* camera = MenuCamera::GetSingleton();
-            if (!object || (HideApparelPreviewItems() && camera->IsPreviewShowingPlayer())) {
-                a_this->UnloadInventoryItem();
-                return;
-            }
-
-            auto* extra = a_entry->extraLists && !a_entry->extraLists->empty() ? a_entry->extraLists->front() : nullptr;
-            a_this->LoadInventoryItem(object, extra);
-        }
-
-        static void Install()
-        {
-            static bool installed = false;
-            if (installed) {
-                return;
-            }
-
-            REL::Relocation<std::uintptr_t> target{ REL::VariantID(50884, 51757, 50884) };
-            SKSE::GetTrampoline().write_branch<5>(target.address(), LoadInventoryItem);
-            installed = true;
-            logger::info("[MenuCamera] Installed item preview hook.");
-        }
-    };
-
     // the game doesn't tell the player's animation graph about an equip while paused, so the old weapon's idle would stay until the menu closed.
     // it's let through while the player is shown, as their animation runs here. other actors are always told. found by Menu Studio
     struct EquipNotifyHook
@@ -866,9 +815,6 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::CraftingMenu>::Install();
     AdvanceMovieHook<RE::GiftMenu>::Install();
     EquipNotifyHook::Install();
-    if (HasApparelPreview()) {
-        LoadInventoryItemHook::Install();
-    }
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
 }
@@ -998,9 +944,6 @@ void MenuCamera::Start(std::string_view menuName)
     // where they can be seen
     const bool keepObstructions = merchantShown || shownVictim || crafting;
 
-    // the one shown faces the camera, so their head would turn round to look where it looks
-    headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
-    HoldHeadStill(subject);
     // the player's face eases to neutral and goes back after. anyone else's is settled in a paused menu, along with anyone held or talked
     // to below, and otherwise left to the game
     const auto menu = RE::UI::GetSingleton()->GetMenu(menuName);
@@ -1184,6 +1127,8 @@ void MenuCamera::Start(std::string_view menuName)
     }
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
+    // the one shown faces the camera, so their head would turn round to look where it looks
+    options.flags |= FUCK::CameraSessionFlags::kHoldHeadStill;
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
@@ -1298,6 +1243,7 @@ void MenuCamera::Stop()
     benchShiftScale = 0.0f;
     if (!restarting) {
         previewShowsPlayer = false;
+        FUCK::SetItemPreviewHidden(false);
         previewOffFor      = 0.0f;
         cardHidden         = false;
         moreHUDHidden      = false;
@@ -1305,7 +1251,6 @@ void MenuCamera::Stop()
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
     auto* subject = GetSubject();
-    subject->AsActorState()->actorState2.headTracking = headTrackingWasOn;
     RestoreFace(subject);
     if (subject != player) {
         subject->data.angle.z = followerAngleZ;
@@ -1346,9 +1291,6 @@ void MenuCamera::Update(float interval)
     if (FollowApparelPreview(interval)) {
         return;
     }
-
-    auto* subject = GetSubject();
-    HoldHeadStill(subject);
 
     // a mod can give back controls locked here (a paraglider landing), so they're locked again
     if (disabledControls) {
@@ -1457,9 +1399,7 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && HideApparelPreviewItems()) {
-            models->UnloadInventoryItem();
-        }
+        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
         HideItemCards(true);
         return true;
     }
@@ -1467,13 +1407,15 @@ bool MenuCamera::FollowApparelPreview(float interval)
     previewOffFor = previewing ? 0.0f : previewOffFor + interval;
     if (previewShowsPlayer && previewOffFor >= BACK_AFTER) {
         previewShowsPlayer = false;
+        FUCK::SetItemPreviewHidden(false);
         HideItemCards(false);
         Restart();
         return true;
     }
 
-    // each frame, after the menu's own update, as the card fades itself back in as the selection changes
+    // each frame, after the menu's own update, as the card fades itself back in as the selection changes, and the setting can change
     if (previewShowsPlayer) {
+        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
         HideItemCards(true);
     }
     return false;

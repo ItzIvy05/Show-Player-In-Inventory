@@ -34,9 +34,6 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* skse)
 {
     SKSE::Init(skse);
 
-    // room for the item preview hook's one jump
-    SKSE::AllocTrampoline(14);
-
     // only a few lines a menu, so it's always on
     spdlog::set_level(spdlog::level::info);
     spdlog::flush_on(spdlog::level::info);
