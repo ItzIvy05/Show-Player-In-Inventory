@@ -1136,6 +1136,10 @@ void MenuCamera::Start(std::string_view menuName)
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
+    // opens on a conversation camera's view, so the handover doesn't jump
+    if (talking) {
+        options.flags |= FUCK::CameraSessionFlags::kStartFromView;
+    }
     // whatever Turn Character says, as the view behind is only for while they're moving
     turnOnStop = moving && turnable && !fromBehind && !seated;
     stoppedFor = 0.0f;
