@@ -459,6 +459,30 @@ namespace
             FUCK::EndTable();
         }
     }
+
+    // another plugin's panel (Menu Studio) saving these through FUCK: read again, and shown at once as SPII's own page would
+    void OnSettingsSaved(const char* plugin, const char* savedBy, bool keybinds, void*)
+    {
+        const std::string_view self = FUCK::g_pluginName;
+        if (keybinds || !plugin || plugin != self || (savedBy && savedBy == self)) {
+            return;
+        }
+
+        const float startFov = Settings::values.startFov;
+        Settings::Load();
+
+        auto* camera = MenuCamera::GetSingleton();
+        EventProcessor::GetSingleton()->ApplyLiveSettings();
+        camera->ApplyAnimation();
+        camera->ApplyFraming();
+
+        FUCK::CameraOffsets offsets;
+        if (Settings::values.startFov != startFov && camera->HasCamera() && FUCK::IsCameraBodyFramed(camera) &&
+            FUCK::GetCameraOffsets(camera, offsets)) {
+            offsets.fov = Settings::values.startFov;
+            FUCK::SetCameraOffsets(camera, offsets);
+        }
+    }
 }
 
 namespace SettingsUI
@@ -474,6 +498,8 @@ namespace SettingsUI
         static SettingsTool settings("$SPII_Title"_T, "", DrawSettings);
         FUCK::RegisterTool(&settings);
         FUCK::RegisterWindow(ControlsWindow::GetSingleton());
+        // listeners are told apart by their userdata, so it's one of SPII's own
+        FUCK::AddSettingsListener(&settings, OnSettingsSaved);
     }
 
     void ShowControls()

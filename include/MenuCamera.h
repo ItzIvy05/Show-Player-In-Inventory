@@ -22,7 +22,6 @@ public:
     
     [[nodiscard]] bool IsActive() const;
     [[nodiscard]] bool HasCamera();
-    [[nodiscard]] bool IsPreviewShowingPlayer() const { return previewShowsPlayer; }
 
     // the one shown: the player, or the follower whose inventory is open
     [[nodiscard]] RE::Actor* GetSubject() const;
@@ -34,7 +33,6 @@ private:
 
     void SetFrozen(bool freeze);
     bool FollowApparelPreview(float interval);
-    void HideItemCards(bool hide);
     void UpdateShade(float interval);
     void RemoveShade();
     void Restart();
@@ -50,7 +48,6 @@ private:
     float playerAngleZ = 0.0f;
 
     bool  pitchLevelled    = false;  // the player's look was levelled, to put back
-    bool  upperBody        = false;  // framed from the chest up
     bool  merchantShown    = false;  // a merchant in barter, whose counter and face are left alone
     bool  hidingPlayer     = false;  // the player's kept hidden, from in front of a merchant
     bool  furnitureBase    = false;  // FUCK's controls over the furniture camera (a crafting menu), which is never left
@@ -60,7 +57,6 @@ private:
     float benchShiftScale  = 0.0f;   // and how far the frame shift slides it per unit, 0 when it can't
     float benchShiftPlaced = 0.0f;   // the shift it was placed with
     float benchShift       = 0.0f;   // and the shift it's slid to since
-    bool  keepObstructions = false;  // nothing's hidden, round a merchant or whoever's pickpocketed
     bool  tutorialPending  = false;  // wait for initial framing updates
     int   tutorialFrames   = 0;
 
@@ -72,8 +68,10 @@ private:
     bool  previewShowsPlayer = false;
     float previewOffFor      = 0.0f;
     bool  restarting         = false;
-    bool  cardHidden         = false;  // the item card hidden for it, to show again
-    bool  moreHUDHidden      = false;  // moreHUD's item card hidden for it, to show again
+
+    // moving as the menu opened, so turned to face the camera once they've stopped (see Update)
+    bool  turnOnStop = false;
+    float stoppedFor = 0.0f;
 
     // the darkness round the menu while sneaking unseen
     bool  shadeAllowed = false;  // not in barter or a follower's inventory, where it's no secret
@@ -105,7 +103,6 @@ private:
     bool active            = false;
     bool cachedFirstPerson = false;
     bool cacheFrozen       = false;
-    bool headTrackingWasOn = false;
     bool playerFrozen      = false;
 
     bool firstPersonAfterBench = false;  // back to first person once the player's left a workbench

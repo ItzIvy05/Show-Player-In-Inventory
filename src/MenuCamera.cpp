@@ -1,6 +1,5 @@
 #include "MenuCamera.h"
 #include "ItemDisplay.h"
-#include "Obstructions.h"
 #include "SettingsUI.h"
 
 // windows.h macro
@@ -45,6 +44,7 @@ namespace
 
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
+    constexpr float TURN_AFTER   = 0.5f;   // seconds stopped before someone who was moving is turned to face the camera
 
     // FUCK-RACE's prompt lock, plus quantity and book menus
     bool IsPromptOpen()
@@ -183,26 +183,6 @@ namespace
                IsCursorOverList<RE::MagicMenu>(ui)     ||
                IsCursorOverList<RE::BarterMenu>(ui)    ||
                IsCursorOverList<RE::ContainerMenu>(ui) ;
-    }
-
-    // head tracking off through the game's own switch (what papyrus SetHeadTracking sets), with any target dropped. each frame, as a head
-    // reloading, e.g. a hair with physics, can pick a target up again. the graph's bHeadTracking only reports what it's doing
-    void HoldHeadStill(RE::Actor* actor)
-    {
-        actor->AsActorState()->actorState2.headTracking = false;
-
-        auto* process = actor->GetActorRuntimeData().currentProcess;
-        auto* high = process ? process->high : nullptr;
-        if (!high) {
-            return;
-        }
-
-        using HeadTrack = RE::HighProcessData::HEAD_TRACK_TYPE;
-        for (std::uint32_t i = 0; i < HeadTrack::kTotal; ++i) {
-            if (high->headTrackTarget[i]) {
-                high->ClearHeadtrackTarget(static_cast<HeadTrack>(i), false);
-            }
-        }
     }
 
     // the face as the menu caught it. expression mods run on papyrus, which stops in a paused menu, so a face caught mid-blink or mid-expression
@@ -381,7 +361,7 @@ namespace
         for (const float offset : { 0.0f, FRONT_CORNER * side, -FRONT_CORNER * side }) {
             const float out = facing + offset;
             const RE::NiPoint3 reach = chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
-            if (Obstructions::IsLineClear(actor, chest, reach, ignore)) {
+            if (FUCK::IsLineClear(actor, chest, reach, ignore)) {
                 return out;
             }
         }
@@ -433,7 +413,7 @@ namespace
         for (const float offset : { SIDE * frontSide, -SIDE * frontSide, CORNER * frontSide, -CORNER * frontSide, 0.0f }) {
             const float out = toPlayer + offset;
             const RE::NiPoint3 reach = *chest + RE::NiPoint3{ std::sin(out), std::cos(out), 0.0f } * FRONT_REACH;
-            if (offset == 0.0f || Obstructions::IsLineClear(mark, *chest, reach, { mark, player })) {
+            if (offset == 0.0f || FUCK::IsLineClear(mark, *chest, reach, { mark, player })) {
                 AimCamera(camera, *chest, out + RE::NI_PI, PITCH, FRONT_BACK);
                 return;
             }
@@ -804,37 +784,6 @@ namespace
         static inline AdvanceMovieFunc _AdvanceMovie = nullptr;
     };
 
-    // thank you myztikrice, from Show Player in Menus
-    // replaces the item preview load, so the preview stays empty while a piece is previewed on the player. only with Apparel Preview
-    struct LoadInventoryItemHook
-    {
-        static void LoadInventoryItem(RE::Inventory3DManager* a_this, RE::InventoryEntryData* a_entry)
-        {
-            auto* object = a_entry ? a_entry->GetObject() : nullptr;
-            auto* camera = MenuCamera::GetSingleton();
-            if (!object || (HideApparelPreviewItems() && camera->IsPreviewShowingPlayer())) {
-                a_this->UnloadInventoryItem();
-                return;
-            }
-
-            auto* extra = a_entry->extraLists && !a_entry->extraLists->empty() ? a_entry->extraLists->front() : nullptr;
-            a_this->LoadInventoryItem(object, extra);
-        }
-
-        static void Install()
-        {
-            static bool installed = false;
-            if (installed) {
-                return;
-            }
-
-            REL::Relocation<std::uintptr_t> target{ REL::VariantID(50884, 51757, 50884) };
-            SKSE::GetTrampoline().write_branch<5>(target.address(), LoadInventoryItem);
-            installed = true;
-            logger::info("[MenuCamera] Installed item preview hook.");
-        }
-    };
-
     // the game doesn't tell the player's animation graph about an equip while paused, so the old weapon's idle would stay until the menu closed.
     // it's let through while the player is shown, as their animation runs here. other actors are always told. found by Menu Studio
     struct EquipNotifyHook
@@ -867,9 +816,6 @@ void MenuCamera::InstallHooks()
     AdvanceMovieHook<RE::CraftingMenu>::Install();
     AdvanceMovieHook<RE::GiftMenu>::Install();
     EquipNotifyHook::Install();
-    if (HasApparelPreview()) {
-        LoadInventoryItemHook::Install();
-    }
 
     logger::info("[MenuCamera] Installed camera state and menu hooks.");
 }
@@ -997,11 +943,8 @@ void MenuCamera::Start(std::string_view menuName)
 
     // nothing's hidden round a merchant, whose counter is part of the view, nor whoever's pickpocketed, as the player's crept up to them
     // where they can be seen
-    keepObstructions = merchantShown || shownVictim || crafting;
+    const bool keepObstructions = merchantShown || shownVictim || crafting;
 
-    // the one shown faces the camera, so their head would turn round to look where it looks
-    headTrackingWasOn = subject->AsActorState()->actorState2.headTracking;
-    HoldHeadStill(subject);
     // the player's face eases to neutral and goes back after. anyone else's is settled in a paused menu, along with anyone held or talked
     // to below, and otherwise left to the game
     const auto menu = RE::UI::GetSingleton()->GetMenu(menuName);
@@ -1041,7 +984,9 @@ void MenuCamera::Start(std::string_view menuName)
         controlMap->ToggleControls(disabledControls.get(), false, false);
     }
 
-    // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it
+    // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it. first person as it was before, as the switch can
+    // reach the perspective cache
+    const bool fromFirstPerson = cachedFirstPerson;
     if (!furnitureBase && camera->currentState->id < RE::CameraState::kThirdPerson) {
         camera->SetState(camera->cameraStates[RE::CameraState::kThirdPerson].get());
         camera->Update();
@@ -1122,13 +1067,14 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    const bool turnCharacter = !shownMerchant && !crafting && !riding && !holding && !Settings::IsManakin(shownFollower) &&
-                               (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool turnable      = !shownMerchant && !crafting && !riding && !holding && !Settings::IsManakin(shownFollower);
+    const bool turnCharacter = turnable && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = !shownMerchant && !crafting && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
-    // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
-    // game's. otherwise the view carries on from the game's camera
-    const bool freshBase = !shownMerchant && (cameraToFront || talking);
+    // a fresh camera for a front view, so it doesn't vary with how the player was looking, in a conversation, whose camera isn't the
+    // game's, and on the move from first person, as the third-person camera just switched to is still easing out from the head. otherwise
+    // the view carries on from the game's camera
+    const bool freshBase = !shownMerchant && (cameraToFront || talking || (moving && fromFirstPerson));
 
     // a front view up against a wall (a shelf, a bookcase) comes round to a clear front corner instead, the camera's side first, aimed here
     // as the merchant's is. straight ahead stays FUCK's own front view. not lying down or on a dragon, whose views FUCK places itself
@@ -1185,9 +1131,14 @@ void MenuCamera::Start(std::string_view menuName)
     }
     // no keyboard camera keys, as the menu uses them for its list and tabs. smp cloth and hair keep moving in a paused menu
     options.flags = FUCK::CameraSessionFlags::kResumable | FUCK::CameraSessionFlags::kNoKeyboard | FUCK::CameraSessionFlags::kRunPhysics;
+    // the one shown faces the camera, so their head would turn round to look where it looks
+    options.flags |= FUCK::CameraSessionFlags::kHoldHeadStill;
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
+    // whatever Turn Character says, as the view behind is only for while they're moving
+    turnOnStop = moving && turnable && !fromBehind && !seated;
+    stoppedFor = 0.0f;
     if (cameraToFront && !frontCorner && !furnitureBase) {
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
@@ -1218,7 +1169,7 @@ void MenuCamera::Start(std::string_view menuName)
     // a merchant always, as across a counter they're seen from the chest up, and a desk's alchemy lab or enchanter. never the player shown
     // for Apparel Preview, so the piece is seen whole, nor at other benches
     const bool onDragon = riddenRace && riddenRace->data.flags.any(RE::RACE_DATA::Flag::kFlies);
-    upperBody = shownMerchant || (bench && bench->desk) || (Settings::values.upperBody && !onDragon && !previewShowsPlayer && !crafting);
+    const bool upperBody = shownMerchant || (bench && bench->desk) || (Settings::values.upperBody && !onDragon && !previewShowsPlayer && !crafting);
     if (upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFrameUpperBody;
     }
@@ -1227,6 +1178,11 @@ void MenuCamera::Start(std::string_view menuName)
     // it follows drawing a weapon or crouching too, as idle sway doesn't change the upper body's measure
     if (looting || seated || upperBody) {
         options.flags |= FUCK::CameraSessionFlags::kFollowPose;
+    }
+
+    // what stands between the camera and the one shown is hidden, though nothing round a merchant, a victim or a bench
+    if (Settings::values.hideObstructions && !keepObstructions) {
+        options.flags |= FUCK::CameraSessionFlags::kHideObstructions;
     }
     if (holding) {
         options.framingMargin = HOLDING_MARGIN;
@@ -1268,7 +1224,6 @@ void MenuCamera::Stop()
 
     // FUCK's camera comes off first, then everything Start changed goes back
     FUCK::EndCameraSession(this);
-    Obstructions::RestoreAll();
     RemoveShade();
     ShowPlayer();
 
@@ -1296,13 +1251,11 @@ void MenuCamera::Stop()
     if (!restarting) {
         previewShowsPlayer = false;
         previewOffFor      = 0.0f;
-        cardHidden         = false;
-        moreHUDHidden      = false;
+        FUCK::SetItemPreviewHidden(false);
     }
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
     auto* subject = GetSubject();
-    subject->AsActorState()->actorState2.headTracking = headTrackingWasOn;
     RestoreFace(subject);
     if (subject != player) {
         subject->data.angle.z = followerAngleZ;
@@ -1311,7 +1264,6 @@ void MenuCamera::Stop()
     follower = {};
     merchantShown    = false;
     hidingPlayer     = false;
-    keepObstructions = false;
 
     mount = {};
 
@@ -1345,8 +1297,16 @@ void MenuCamera::Update(float interval)
         return;
     }
 
-    auto* subject = GetSubject();
-    HoldHeadStill(subject);
+    // the view stays behind someone moving as the menu opens, so once they've stopped for a moment they're turned to face it, the view set
+    // level in front of them, as it's still tilted as they ran. only with skyrim souls, as a paused menu keeps their run going
+    if (turnOnStop) {
+        auto* process = RE::PlayerCharacter::GetSingleton()->GetActorRuntimeData().currentProcess;
+        const float speed = process && process->middleHigh ? process->middleHigh->currentMovementSpeed : 0.0f;
+        stoppedFor = speed > MOVING_SPEED ? 0.0f : stoppedFor + interval;
+        if (stoppedFor >= TURN_AFTER && FUCK::FaceCameraSubject(this, true)) {
+            turnOnStop = false;
+        }
+    }
 
     // a mod can give back controls locked here (a paraglider landing), so they're locked again
     if (disabledControls) {
@@ -1410,10 +1370,7 @@ void MenuCamera::Update(float interval)
         SettingsUI::ShowControls();
     }
 
-    // once the camera is placed, so it's what this frame sees from. a hidden player is hidden again after, in case anything shows them
-    if (!keepObstructions) {
-        Obstructions::Update(interval, subject, shown, upperBody);
-    }
+    // a hidden player is hidden again once the camera's placed, in case anything shows them
     if (hidingPlayer) {
         HidePlayer();
     }
@@ -1458,75 +1415,23 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        if (auto* models = RE::Inventory3DManager::GetSingleton(); models && HideApparelPreviewItems()) {
-            models->UnloadInventoryItem();
-        }
-        HideItemCards(true);
+        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
         return true;
     }
 
     previewOffFor = previewing ? 0.0f : previewOffFor + interval;
     if (previewShowsPlayer && previewOffFor >= BACK_AFTER) {
         previewShowsPlayer = false;
-        HideItemCards(false);
+        FUCK::SetItemPreviewHidden(false);
         Restart();
         return true;
     }
 
-    // each frame, after the menu's own update, as the card fades itself back in as the selection changes
+    // each frame, as the setting can change
     if (previewShowsPlayer) {
-        HideItemCards(true);
+        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
     }
     return false;
-}
-
-// the item cards out of the way of the piece being previewed: faded out with the menu's own fade, which the next row highlighted brings
-// back, and what holds the card hidden too, so that fade can't show it for a frame
-void MenuCamera::HideItemCards(bool hide)
-{
-    if (hide && !HideApparelPreviewItems()) {
-        hide = false;
-    }
-
-    const auto view = RE::UI::GetSingleton()->GetMovieView(shownMenu);
-    if (!view) {
-        cardHidden = false;
-        moreHUDHidden = false;
-        return;
-    }
-
-    const auto setVisible = [hide](RE::GFxValue& clip, bool& hidden) {
-        RE::GFxValue::DisplayInfo info;
-        clip.GetDisplayInfo(&info);
-        if (hide && info.GetVisible()) {
-            info.SetVisible(false);
-            clip.SetDisplayInfo(info);
-            hidden = true;
-        } else if (!hide && hidden) {
-            info.SetVisible(true);
-            clip.SetDisplayInfo(info);
-            hidden = false;
-        }
-    };
-
-    RE::GFxValue card;
-    RE::GFxValue holder;
-    if (view->GetVariable(&card, "_root.Menu_mc.itemCard") && card.IsDisplayObject() && card.GetMember("_parent", &holder) &&
-        holder.IsDisplayObject()) {
-        setVisible(holder, cardHidden);
-    } else if (view->GetVariable(&card, "_root.Menu_mc.ItemCard_mc") && card.IsDisplayObject()) {
-        setVisible(card, cardHidden);
-    }
-    if (hide && card.IsDisplayObject()) {
-        card.Invoke("FadeOutCard");
-        RE::GFxValue faded{ false };
-        view->SetVariable("_root.Menu_mc._bItemCardFadedIn", faded, RE::GFxMovie::SetVarType::kNormal);
-    }
-
-    RE::GFxValue moreHUD;
-    if (view->GetVariable(&moreHUD, "_root.AHZItemCardContainer") && moreHUD.IsDisplayObject()) {
-        setVisible(moreHUD, moreHUDHidden);
-    }
 }
 
 // shows someone else in the same menu: everything goes back, then is set up again, staying in third person between. the first-person cache
