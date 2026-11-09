@@ -69,6 +69,10 @@ private:
     float previewOffFor      = 0.0f;
     bool  restarting         = false;
 
+    // moving as the menu opened, so turned to face the camera once they've stopped (see Update)
+    bool  turnOnStop = false;
+    float stoppedFor = 0.0f;
+
     // the darkness round the menu while sneaking unseen
     bool  shadeAllowed = false;  // not in barter or a follower's inventory, where it's no secret
     bool  unseen       = false;

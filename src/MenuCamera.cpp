@@ -44,6 +44,7 @@ namespace
 
     // if the player is going faster than this as the menu opens, they count as moving and the view stays behind them. walking is around 80
     constexpr float MOVING_SPEED = 50.0f;
+    constexpr float TURN_AFTER   = 0.5f;   // seconds stopped before someone who was moving is turned to face the camera
 
     // FUCK-RACE's prompt lock, plus quantity and book menus
     bool IsPromptOpen()
@@ -1064,8 +1065,8 @@ void MenuCamera::Start(std::string_view menuName)
         }
     }
 
-    const bool turnCharacter = !shownMerchant && !crafting && !riding && !holding && !Settings::IsManakin(shownFollower) &&
-                               (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
+    const bool turnable      = !shownMerchant && !crafting && !riding && !holding && !Settings::IsManakin(shownFollower);
+    const bool turnCharacter = turnable && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = !shownMerchant && !crafting && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
     // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
@@ -1132,6 +1133,9 @@ void MenuCamera::Start(std::string_view menuName)
     if (!moving && turnCharacter) {
         options.flags |= FUCK::CameraSessionFlags::kFaceCamera;
     }
+    // whatever Turn Character says, as the view behind is only for while they're moving
+    turnOnStop = moving && turnable && !fromBehind && !seated;
+    stoppedFor = 0.0f;
     if (cameraToFront && !frontCorner && !furnitureBase) {
         options.flags |= FUCK::CameraSessionFlags::kCameraToFront;
     }
@@ -1288,6 +1292,17 @@ void MenuCamera::Update(float interval)
 
     if (FollowApparelPreview(interval)) {
         return;
+    }
+
+    // the view stays behind someone moving as the menu opens, so once they've stopped for a moment they're turned to face it. only with
+    // skyrim souls, as a paused menu keeps their run going
+    if (turnOnStop) {
+        auto* process = RE::PlayerCharacter::GetSingleton()->GetActorRuntimeData().currentProcess;
+        const float speed = process && process->middleHigh ? process->middleHigh->currentMovementSpeed : 0.0f;
+        stoppedFor = speed > MOVING_SPEED ? 0.0f : stoppedFor + interval;
+        if (stoppedFor >= TURN_AFTER && FUCK::FaceCameraSubject(this)) {
+            turnOnStop = false;
+        }
     }
 
     // a mod can give back controls locked here (a paraglider landing), so they're locked again
