@@ -984,7 +984,9 @@ void MenuCamera::Start(std::string_view menuName)
         controlMap->ToggleControls(disabledControls.get(), false, false);
     }
 
-    // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it
+    // EnterThirdPerson minus its zoom reset, fov read after the tab camera restores it. first person as it was before, as the switch can
+    // reach the perspective cache
+    const bool fromFirstPerson = cachedFirstPerson;
     if (!furnitureBase && camera->currentState->id < RE::CameraState::kThirdPerson) {
         camera->SetState(camera->cameraStates[RE::CameraState::kThirdPerson].get());
         camera->Update();
@@ -1069,9 +1071,10 @@ void MenuCamera::Start(std::string_view menuName)
     const bool turnCharacter = turnable && (shownFollower != nullptr || (Settings::values.turnCharacter && !fromBehind && !seated));
     const bool cameraToFront = !shownMerchant && !crafting && !moving && !fromBehind && (!turnCharacter || (talking && shownFollower));
 
-    // a fresh camera for a front view, so it doesn't vary with how the player was looking, and in a conversation, whose camera isn't the
-    // game's. otherwise the view carries on from the game's camera
-    const bool freshBase = !shownMerchant && (cameraToFront || talking);
+    // a fresh camera for a front view, so it doesn't vary with how the player was looking, in a conversation, whose camera isn't the
+    // game's, and on the move from first person, as the third-person camera just switched to is still easing out from the head. otherwise
+    // the view carries on from the game's camera
+    const bool freshBase = !shownMerchant && (cameraToFront || talking || (moving && fromFirstPerson));
 
     // a front view up against a wall (a shelf, a bookcase) comes round to a clear front corner instead, the camera's side first, aimed here
     // as the merchant's is. straight ahead stays FUCK's own front view. not lying down or on a dragon, whose views FUCK places itself
@@ -1294,13 +1297,13 @@ void MenuCamera::Update(float interval)
         return;
     }
 
-    // the view stays behind someone moving as the menu opens, so once they've stopped for a moment they're turned to face it. only with
-    // skyrim souls, as a paused menu keeps their run going
+    // the view stays behind someone moving as the menu opens, so once they've stopped for a moment they're turned to face it, the view set
+    // level in front of them, as it's still tilted as they ran. only with skyrim souls, as a paused menu keeps their run going
     if (turnOnStop) {
         auto* process = RE::PlayerCharacter::GetSingleton()->GetActorRuntimeData().currentProcess;
         const float speed = process && process->middleHigh ? process->middleHigh->currentMovementSpeed : 0.0f;
         stoppedFor = speed > MOVING_SPEED ? 0.0f : stoppedFor + interval;
-        if (stoppedFor >= TURN_AFTER && FUCK::FaceCameraSubject(this)) {
+        if (stoppedFor >= TURN_AFTER && FUCK::FaceCameraSubject(this, true)) {
             turnOnStop = false;
         }
     }
