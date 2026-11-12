@@ -926,7 +926,7 @@ void MenuCamera::Start(std::string_view menuName)
     const bool container = menuName == RE::ContainerMenu::MENU_NAME;
     auto* shownFollower = container ? Settings::GetFollower() : nullptr;
     shadeAllowed = menuName != RE::BarterMenu::MENU_NAME && !shownFollower;
-    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && !previewShowsPlayer ? GetMerchant() : nullptr;
+    auto* shownMerchant = menuName == RE::BarterMenu::MENU_NAME && Settings::values.showMerchant && !previewShowsPlayer ? GetMerchant() : nullptr;
     auto* shownVictim = container ? Settings::GetPickpocketed() : nullptr;
     auto* shownOther = shownFollower ? shownFollower : shownMerchant ? shownMerchant : shownVictim;
     follower = shownOther ? shownOther->GetHandle() : RE::ActorHandle{};

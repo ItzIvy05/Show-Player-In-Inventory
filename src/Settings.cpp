@@ -18,6 +18,14 @@ namespace
         { "bUpperBody",        &Settings::Values::upperBody },
         { "bCameraControls",   &Settings::Values::cameraControls },
         { "bTutorialSeen",     &Settings::Values::tutorialSeen },
+        { "bShowInventory",    &Settings::Values::showInventory },
+        { "bShowMagic",        &Settings::Values::showMagic },
+        { "bShowContainers",   &Settings::Values::showContainers },
+        { "bShowFollowers",    &Settings::Values::showFollowers },
+        { "bShowPickpocket",   &Settings::Values::showPickpocket },
+        { "bShowBarter",       &Settings::Values::showBarter },
+        { "bShowMerchant",     &Settings::Values::showMerchant },
+        { "bShowCrafting",     &Settings::Values::showCrafting },
         { "fItemCardX",        &Settings::Values::itemCardX },
         { "fItemCardY",        &Settings::Values::itemCardY },
         { "fItemCardScale",    &Settings::Values::itemCardScale },
@@ -84,11 +92,17 @@ namespace Settings
 
     bool IsWatchedMenu(std::string_view menuName)
     {
-        if (menuName == RE::InventoryMenu::MENU_NAME ||
-            menuName == RE::MagicMenu::MENU_NAME     ||
-            menuName == RE::BarterMenu::MENU_NAME    ||
-            IsCraftingMenu(menuName)) {
-            return true;
+        if (menuName == RE::InventoryMenu::MENU_NAME) {
+            return values.showInventory;
+        }
+        if (menuName == RE::MagicMenu::MENU_NAME) {
+            return values.showMagic;
+        }
+        if (menuName == RE::BarterMenu::MENU_NAME) {
+            return values.showBarter;
+        }
+        if (IsCraftingMenu(menuName)) {
+            return values.showCrafting;
         }
 
         // chests, bodies and other containers, and a living actor's inventory when it's a follower's or being pickpocketed. anyone else's (a
@@ -100,7 +114,13 @@ namespace Settings
             }
 
             const auto* actor = target->As<RE::Actor>();
-            return !actor || actor->IsDead() || GetFollower() || GetPickpocketed();
+            if (!actor || actor->IsDead()) {
+                return values.showContainers;
+            }
+            if (GetFollower()) {
+                return values.showFollowers;
+            }
+            return GetPickpocketed() && values.showPickpocket;
         }
 
         return false;

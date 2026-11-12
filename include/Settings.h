@@ -19,6 +19,16 @@ namespace Settings
         bool cameraControls    = true;
         bool tutorialSeen      = false;
 
+        // the menus your character's shown in
+        bool showInventory     = true;
+        bool showMagic         = true;
+        bool showContainers    = true;  // chests and bodies
+        bool showFollowers     = true;  // a follower's inventory, which shows them
+        bool showPickpocket    = true;
+        bool showBarter        = true;
+        bool showMerchant      = true;  // in barter, the merchant rather than the player
+        bool showCrafting      = true;
+
         // the item card and 3D item preview, in the movie's pixels (positive right and up) and as a scale, 0 and 1 leaving them as they are
         float itemCardX        = 0.0f;
         float itemCardY        = 0.0f;

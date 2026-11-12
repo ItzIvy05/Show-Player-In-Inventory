@@ -323,6 +323,9 @@ namespace
         FUCK::Unindent();
     }
 
+    void DrawSettingsTab();
+    void DrawMenusTab();
+
     void DrawSettings()
     {
         auto& values = Settings::values;
@@ -340,6 +343,51 @@ namespace
 
         FUCK::Spacing();
 
+        if (FUCK::BeginTabBar("##Tabs")) {
+            if (FUCK::BeginTabItem("$SPII_TabSettings"_T)) {
+                DrawSettingsTab();
+                FUCK::EndTabItem();
+            }
+            if (FUCK::BeginTabItem("$SPII_TabMenus"_T)) {
+                DrawMenusTab();
+                FUCK::EndTabItem();
+            }
+            FUCK::EndTabBar();
+        }
+    }
+
+    // which menus show someone, taking effect the next time one opens
+    void DrawMenusTab()
+    {
+        auto& values = Settings::values;
+        if (BeginCheckboxes("##Menus")) {
+            FUCK::TableNextColumn();
+            BeginSection("$SPII_Menus"_T);
+            Checkbox("$SPII_ShowInventory"_T, values.showInventory, "$SPII_ShowInventoryTT"_T);
+            Checkbox("$SPII_ShowMagic"_T,     values.showMagic,     "$SPII_ShowMagicTT"_T);
+            Checkbox("$SPII_ShowCrafting"_T,  values.showCrafting,  "$SPII_ShowCraftingTT"_T);
+            Checkbox("$SPII_ShowBarter"_T,    values.showBarter,    "$SPII_ShowBarterTT"_T);
+            FUCK::Indent();
+            FUCK::BeginDisabled(!values.showBarter);
+            Checkbox("$SPII_ShowMerchant"_T,  values.showMerchant,  "$SPII_ShowMerchantTT"_T);
+            FUCK::EndDisabled();
+            FUCK::Unindent();
+            EndSection();
+
+            FUCK::TableNextColumn();
+            BeginSection("$SPII_Containers"_T);
+            Checkbox("$SPII_ShowContainers"_T, values.showContainers, "$SPII_ShowContainersTT"_T);
+            Checkbox("$SPII_ShowFollowers"_T,  values.showFollowers,  "$SPII_ShowFollowersTT"_T);
+            Checkbox("$SPII_ShowPickpocket"_T, values.showPickpocket, "$SPII_ShowPickpocketTT"_T);
+            EndSection();
+
+            FUCK::EndTable();
+        }
+    }
+
+    void DrawSettingsTab()
+    {
+        auto& values = Settings::values;
         auto* camera = MenuCamera::GetSingleton();
         if (BeginCheckboxes("##Settings")) {
             FUCK::TableNextColumn();
