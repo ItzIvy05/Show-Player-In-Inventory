@@ -239,35 +239,38 @@ namespace
         }
     };
 
-    // FUCK's offsets on the framing, as right, forward and up, while a menu's open. then the field of view framed menus open at, which a
-    // framed one shows at once
-    void PositionSliders(MenuCamera* camera)
+    // the field of view framed menus open at, which a framed one open shows at once
+    void StartFovSlider(MenuCamera* camera)
     {
-        constexpr float RANGE   = 200.0f;  // game units
         constexpr float FOV_MIN = 20.0f;
         constexpr float FOV_MAX = 120.0f;
 
-        FUCK::CameraOffsets offsets;
-        const bool open = camera->HasCamera() && FUCK::GetCameraOffsets(camera, offsets);
-
-        bool changed = false;
-        if (open) {
-            changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -RANGE, RANGE, "%.0f");
-            changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, RANGE, -RANGE, "%.0f");
-            changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -RANGE, RANGE, "%.0f");
-        } else {
-            FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
-        }
-
         if (FUCK::SliderFloat("$SPII_StartFov"_T, &Settings::values.startFov, FOV_MIN, FOV_MAX, "%.0f")) {
             Settings::Save();
-            if (open && FUCK::IsCameraBodyFramed(camera)) {
+            FUCK::CameraOffsets offsets;
+            if (camera->HasCamera() && FUCK::IsCameraBodyFramed(camera) && FUCK::GetCameraOffsets(camera, offsets)) {
                 offsets.fov = Settings::values.startFov;
-                changed = true;
+                FUCK::SetCameraOffsets(camera, offsets);
             }
         }
         FUCK::SetTooltip("$SPII_StartFovTT"_T);
+    }
 
+    // FUCK's offsets on the framing, as right, forward and up, while a menu's open
+    void PositionSliders(MenuCamera* camera)
+    {
+        constexpr float RANGE = 200.0f;  // game units
+
+        FUCK::CameraOffsets offsets;
+        if (!camera->HasCamera() || !FUCK::GetCameraOffsets(camera, offsets)) {
+            FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+            return;
+        }
+
+        bool changed = false;
+        changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -RANGE, RANGE, "%.0f");
+        changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, RANGE, -RANGE, "%.0f");
+        changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -RANGE, RANGE, "%.0f");
         if (changed) {
             FUCK::SetCameraOffsets(camera, offsets);
         }
@@ -324,7 +327,7 @@ namespace
     }
 
     void DrawSettingsTab();
-    void DrawMenusTab();
+    void DrawOtherTab();
 
     void DrawSettings()
     {
@@ -349,16 +352,16 @@ namespace
                 DrawSettingsTab();
                 FUCK::EndTabItem();
             }
-            if (FUCK::BeginTabItem("$SPII_TabMenus"_T)) {
-                DrawMenusTab();
+            if (FUCK::BeginTabItem("$SPII_TabOther"_T)) {
+                DrawOtherTab();
                 FUCK::EndTabItem();
             }
             FUCK::EndTabBar();
         }
     }
 
-    // which menus show someone, taking effect the next time one opens
-    void DrawMenusTab()
+    // which menus show someone, taking effect the next time one opens, and the camera's speeds
+    void DrawOtherTab()
     {
         auto& values = Settings::values;
         if (BeginCheckboxes("##Menus")) {
@@ -373,6 +376,14 @@ namespace
             Checkbox("$SPII_ShowMerchant"_T,  values.showMerchant,  "$SPII_ShowMerchantTT"_T);
             FUCK::EndDisabled();
             FUCK::Unindent();
+            EndSection();
+
+            BeginSection("$SPII_Advanced"_T);
+            if (FUCK::CollapsingHeader("$SPII_CameraFeel"_T)) {
+                FUCK::Indent();
+                FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
+                FUCK::Unindent();
+            }
             EndSection();
 
             FUCK::TableNextColumn();
@@ -409,6 +420,48 @@ namespace
             FUCK::SetTooltip("$SPII_FrameShiftTT"_T);
             EndSection();
 
+            BeginSection("$SPII_Adjust"_T);
+            StartFovSlider(camera);
+            if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
+                FUCK::Indent();
+                PositionSliders(camera);
+                FUCK::Unindent();
+            }
+            EndSection();
+
+            BeginSection("$SPII_Controls"_T);
+            Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
+            if (FUCK::Button("$SPII_ShowControls"_T)) {
+                SettingsUI::ShowControls();
+            }
+            FUCK::SetTooltip("$SPII_ShowControlsTT"_T);
+            if (values.cameraControls) {
+                FUCK::SameLine();
+                FUCK::DrawCameraHelpMarker(HELP_FLAGS);
+            }
+            EndSection();
+
+            BeginSection("$SPII_ResetSection"_T);
+            FUCK::BeginDisabled(!FUCK::IsCameraModified(camera));
+            if (FUCK::Button("$SPII_ResetCamera"_T)) {
+                camera->ResetCamera();
+            }
+            FUCK::EndDisabled();
+            FUCK::SetTooltip("$SPII_ResetCameraTT"_T);
+
+            FUCK::SameLine();
+            if (FUCK::Button("$SPII_ResetDefaults"_T)) {
+                Settings::SetDefaults();
+                Settings::Save();
+                EventProcessor::GetSingleton()->ApplyLiveSettings();
+                camera->ApplyAnimation();
+                camera->ApplyFraming();
+                camera->ResetCamera();
+                camera->ApplyItemHiding();
+            }
+            FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
+            EndSection();
+
             FUCK::TableNextColumn();
             BeginSection("$SPII_Camera"_T);
             Checkbox("$SPII_UpperBody"_T,      values.upperBody,      "$SPII_UpperBodyTT"_T);
@@ -420,25 +473,6 @@ namespace
             Checkbox("$SPII_RememberFacing"_T, values.rememberFacing, "$SPII_RememberFacingTT"_T);
             FUCK::EndDisabled();
             FUCK::Unindent();
-            EndSection();
-
-            FUCK::EndTable();
-        }
-
-        FUCK::Spacing();
-
-        if (BeginCheckboxes("##Controls")) {
-            FUCK::TableNextColumn();
-            BeginSection("$SPII_Controls"_T);
-            Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
-            if (FUCK::Button("$SPII_ShowControls"_T)) {
-                SettingsUI::ShowControls();
-            }
-            FUCK::SetTooltip("$SPII_ShowControlsTT"_T);
-            if (values.cameraControls) {
-                FUCK::SameLine();
-                FUCK::DrawCameraHelpMarker(HELP_FLAGS);
-            }
             EndSection();
 
             BeginSection("$SPII_Items"_T);
@@ -470,42 +504,6 @@ namespace
                 FUCK::SetTooltip("$SPII_BenchLabelXTT"_T);
                 FUCK::Unindent();
             }
-            EndSection();
-
-            FUCK::TableNextColumn();
-            BeginSection("$SPII_Adjust"_T);
-            StartFovSlider(camera);
-            if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
-                FUCK::Indent();
-                PositionSliders(camera);
-                FUCK::Unindent();
-            }
-            if (FUCK::CollapsingHeader("$SPII_Advanced"_T)) {
-                FUCK::Indent();
-                FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
-                FUCK::Unindent();
-            }
-            EndSection();
-
-            BeginSection("$SPII_ResetSection"_T);
-            FUCK::BeginDisabled(!FUCK::IsCameraModified(camera));
-            if (FUCK::Button("$SPII_ResetCamera"_T)) {
-                camera->ResetCamera();
-            }
-            FUCK::EndDisabled();
-            FUCK::SetTooltip("$SPII_ResetCameraTT"_T);
-
-            FUCK::SameLine();
-            if (FUCK::Button("$SPII_ResetDefaults"_T)) {
-                Settings::SetDefaults();
-                Settings::Save();
-                EventProcessor::GetSingleton()->ApplyLiveSettings();
-                camera->ApplyAnimation();
-                camera->ApplyFraming();
-                camera->ResetCamera();
-                camera->ApplyItemHiding();
-            }
-            FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
             EndSection();
 
             FUCK::EndTable();
