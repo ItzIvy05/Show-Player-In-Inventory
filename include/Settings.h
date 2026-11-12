@@ -51,6 +51,10 @@ namespace Settings
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
         bool hideAppPrevItems  = false;
 
+        // the item card and 3D item kept hidden in every item menu
+        bool hideItemCard      = false;
+        bool hideItemPreview   = false;
+
         // the item menus' card spot as last laid out, on a screen of this shape, for a bench opened before any item menu
         float spotAspect       = 0.0f;
         float cardSpotX        = 0.0f;

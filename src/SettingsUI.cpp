@@ -339,6 +339,7 @@ namespace
         if (toggled) {
             Settings::Save();
             EventProcessor::GetSingleton()->ApplyLiveSettings();
+            MenuCamera::GetSingleton()->ApplyItemHiding();
         }
 
         FUCK::Spacing();
@@ -441,22 +442,24 @@ namespace
             EndSection();
 
             BeginSection("$SPII_Items"_T);
+            if (Checkbox("$SPII_HideItemCard"_T, values.hideItemCard, "$SPII_HideItemCardTT"_T) |
+                Checkbox("$SPII_HideItemPreview"_T, values.hideItemPreview, "$SPII_HideItemPreviewTT"_T)) {
+                camera->ApplyItemHiding();
+            }
             Checkbox("$SPII_AutoAdjust"_T, ItemDisplay::AutoAdjustSetting(), "$SPII_AutoAdjustTT"_T);
             static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
             if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
                 Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
             }
-            // these are set by Auto-Adjustment while it places them
-            if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
+            // only with Auto-Adjustment off, as it sets these while it places them, and not for what's hidden
+            const bool manual = !ItemDisplay::AutoAdjustSetting();
+            if (manual && !values.hideItemPreview && FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
-                FUCK::EndDisabled();
                 FUCK::Unindent();
             }
-            if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
+            if (manual && !values.hideItemCard && FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
                 FUCK::Indent();
-                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
                 ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
                 FUCK::Separator();
                 const ImVec2 screen = FUCK::GetDisplaySize();
@@ -465,13 +468,13 @@ namespace
                     Settings::Save();
                 }
                 FUCK::SetTooltip("$SPII_BenchLabelXTT"_T);
-                FUCK::EndDisabled();
                 FUCK::Unindent();
             }
             EndSection();
 
             FUCK::TableNextColumn();
             BeginSection("$SPII_Adjust"_T);
+            StartFovSlider(camera);
             if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
                 FUCK::Indent();
                 PositionSliders(camera);
@@ -500,6 +503,7 @@ namespace
                 camera->ApplyAnimation();
                 camera->ApplyFraming();
                 camera->ResetCamera();
+                camera->ApplyItemHiding();
             }
             FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
             EndSection();

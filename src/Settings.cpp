@@ -36,6 +36,8 @@ namespace
         { "bAutoAdjust",       &Settings::Values::autoAdjust },
         { "bAutoAdjustOwn",    &Settings::Values::autoAdjustOwn },
         { "bHideAppPrevItems", &Settings::Values::hideAppPrevItems },
+        { "bHideItemCard",     &Settings::Values::hideItemCard },
+        { "bHideItemPreview",  &Settings::Values::hideItemPreview },
         { "fFrameShift",       &Settings::Values::frameShift },
         { "fStartFov",         &Settings::Values::startFov },
         { "fSpotAspect",       &Settings::Values::spotAspect },

@@ -1255,7 +1255,7 @@ void MenuCamera::Stop()
     if (!restarting) {
         previewShowsPlayer = false;
         previewOffFor      = 0.0f;
-        FUCK::SetItemPreviewHidden(false);
+        ApplyItemHiding();
     }
 
     // FUCK turns the one shown to face the camera, by their heading or their 3D, so this puts them back to how they were facing
@@ -1419,23 +1419,31 @@ bool MenuCamera::FollowApparelPreview(float interval)
         previewShowsPlayer = true;
         previewOffFor = 0.0f;
         Restart();
-        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
+        ApplyItemHiding();
         return true;
     }
 
     previewOffFor = previewing ? 0.0f : previewOffFor + interval;
     if (previewShowsPlayer && previewOffFor >= BACK_AFTER) {
         previewShowsPlayer = false;
-        FUCK::SetItemPreviewHidden(false);
+        ApplyItemHiding();
         Restart();
         return true;
     }
 
     // each frame, as the setting can change
     if (previewShowsPlayer) {
-        FUCK::SetItemPreviewHidden(HideApparelPreviewItems());
+        ApplyItemHiding();
     }
     return false;
+}
+
+// the card and 3D item as the settings hide them, and both while Apparel Preview has a piece on the player, if that's set
+void MenuCamera::ApplyItemHiding()
+{
+    const auto& values  = Settings::values;
+    const bool  apparel = previewShowsPlayer && HideApparelPreviewItems();
+    FUCK::SetItemDisplayHidden(apparel || (values.enabled && values.hideItemPreview), apparel || (values.enabled && values.hideItemCard));
 }
 
 // shows someone else in the same menu: everything goes back, then is set up again, staying in third person between. the first-person cache
