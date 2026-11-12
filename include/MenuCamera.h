@@ -17,6 +17,7 @@ public:
     void        ResetCamera();
     void        ApplyFraming();
     void        ApplyAnimation();
+    void        ApplyItemHiding();
     void        OnPerspectiveUpdate(bool firstPerson);
     void        SetCacheFrozen(bool frozen);
     
