@@ -110,13 +110,12 @@ namespace
         {
             const bool appearing = FUCK::IsWindowAppearing();
 
-            // FUCK's window background follows the user's transparency, this box stays solid
             const ImVec2 size = FUCK::GetWindowSize();
             const ImVec2 pos = FUCK::GetWindowPos();
-            const float border = FUCK::GetStyleVar(ImGuiStyleVar_WindowBorderSize);
-            ImVec4 background = FUCK::GetStyleColorVec4(ImGuiCol_WindowBg);
-            background.w = 1.0f;
-            FUCK::DrawRectFilled(ImVec2(pos.x + border, pos.y + border), ImVec2(pos.x + size.x - border, pos.y + size.y - border), background, FUCK::GetStyleVar(ImGuiStyleVar_WindowRounding));
+
+            // the padding, from where the content starts, to measure the size the window fits itself to
+            const ImVec2 start = FUCK::GetCursorScreenPos();
+            const ImVec2 padding(start.x - pos.x, start.y - pos.y);
 
             const bool gamepad = FUCK::GetInputDevice() == FUCK::InputDevice::kGamepad;
             const Icon dragIcon = KeyIcon(FUCK::Keys::kIcon_MouseMove);
@@ -171,10 +170,15 @@ namespace
             const float width = FUCK::CalcTextSize(ok).x + FUCK::GetStyleVarVec(ImGuiStyleVar_FramePadding).x * 2.0f;
             FUCK::SetCursorPosX((size.x - width) * 0.5f);
             if (FUCK::Button(ok)) {
-                Acknowledge();
+                SetOpen(false);
             }
 
             FUCK::SetItemDefaultFocus();
+
+            // the content's size with the padding round it, as ImGui fits the window to next frame. measured on the frame a new window
+            // is kept hidden for, so it opens centred
+            const ImVec2 end = FUCK::GetItemRectMax();
+            fittedSize = ImVec2(FUCK::Scale(POPUP_WIDTH) + padding.x * 2.0f, end.y - pos.y + padding.y);
         }
 
         bool IsOpen() const override
@@ -184,6 +188,11 @@ namespace
 
         void SetOpen(bool a_open) override
         {
+            // closed once shown, by clicking away as much as by Confirm, it's been seen
+            if (!a_open && visible && !Settings::values.tutorialSeen) {
+                Settings::values.tutorialSeen = true;
+                Settings::Save();
+            }
             visible = a_open;
         }
 
@@ -192,21 +201,26 @@ namespace
             return FUCK::Scale(POPUP_WIDTH, 0.0f);
         }
 
+        // centred by the size it fits itself to. FUCK places a window that can't be moved here every frame
+        ImVec2 GetDefaultPos() const override
+        {
+            const auto screen = FUCK::GetDisplaySize();
+            return ImVec2((screen.x - fittedSize.x) * 0.5f, (screen.y - fittedSize.y) * 0.5f);
+        }
+
+        // FUCK asks for these whenever it checks its windows, not only before drawing this one, so nothing's set here. closed by clicking
+        // anywhere else
         FUCK::WindowFlags GetFlags() const override
         {
-            // FUCK queries flags before BeginWindow, so place the auto-sized window by its
-            // centre on that same frame, rather than moving it afterwards
-            const auto screen = FUCK::GetDisplaySize();
-            FUCK::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            return FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kNoResize |
-                   FUCK::WindowFlags::kNoMove | FUCK::WindowFlags::kCustomPosition | FUCK::WindowFlags::kExtendBorder | FUCK::WindowFlags::kAutoResize;
+            return FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kNoResize | FUCK::WindowFlags::kNoMove | FUCK::WindowFlags::kExtendBorder |
+                   FUCK::WindowFlags::kAutoResize | FUCK::WindowFlags::kCloseOnClickOutside;
         }
 
         bool OnAsyncInput(const void* a_events) override
         {
             for (const auto key : CLOSE_KEYS) {
                 if (FUCK::IsInputPressed(a_events, key)) {
-                    Acknowledge();
+                    SetOpen(false);
                     return true;
                 }
             }
@@ -215,16 +229,8 @@ namespace
         }
 
     private:
-        void Acknowledge()
-        {
-            if (!Settings::values.tutorialSeen) {
-                Settings::values.tutorialSeen = true;
-                Settings::Save();
-            }
-            SetOpen(false);
-        }
-
         std::atomic_bool visible = false;
+        ImVec2 fittedSize{ 0.0f, 0.0f };
     };
 
     // FUCK calls OnClose when the page is left or the menu shuts, the controls box goes with it
