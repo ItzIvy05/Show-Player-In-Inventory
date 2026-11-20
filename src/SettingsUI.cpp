@@ -110,13 +110,12 @@ namespace
         {
             const bool appearing = FUCK::IsWindowAppearing();
 
-            // FUCK's window background follows the user's transparency, this box stays solid
             const ImVec2 size = FUCK::GetWindowSize();
             const ImVec2 pos = FUCK::GetWindowPos();
-            const float border = FUCK::GetStyleVar(ImGuiStyleVar_WindowBorderSize);
-            ImVec4 background = FUCK::GetStyleColorVec4(ImGuiCol_WindowBg);
-            background.w = 1.0f;
-            FUCK::DrawRectFilled(ImVec2(pos.x + border, pos.y + border), ImVec2(pos.x + size.x - border, pos.y + size.y - border), background, FUCK::GetStyleVar(ImGuiStyleVar_WindowRounding));
+
+            // the padding, from where the content starts, to measure the size the window fits itself to
+            const ImVec2 start = FUCK::GetCursorScreenPos();
+            const ImVec2 padding(start.x - pos.x, start.y - pos.y);
 
             const bool gamepad = FUCK::GetInputDevice() == FUCK::InputDevice::kGamepad;
             const Icon dragIcon = KeyIcon(FUCK::Keys::kIcon_MouseMove);
@@ -171,10 +170,15 @@ namespace
             const float width = FUCK::CalcTextSize(ok).x + FUCK::GetStyleVarVec(ImGuiStyleVar_FramePadding).x * 2.0f;
             FUCK::SetCursorPosX((size.x - width) * 0.5f);
             if (FUCK::Button(ok)) {
-                Acknowledge();
+                SetOpen(false);
             }
 
             FUCK::SetItemDefaultFocus();
+
+            // the content's size with the padding round it, as ImGui fits the window to next frame. measured on the frame a new window
+            // is kept hidden for, so it opens centred
+            const ImVec2 end = FUCK::GetItemRectMax();
+            fittedSize = ImVec2(FUCK::Scale(POPUP_WIDTH) + padding.x * 2.0f, end.y - pos.y + padding.y);
         }
 
         bool IsOpen() const override
@@ -184,6 +188,11 @@ namespace
 
         void SetOpen(bool a_open) override
         {
+            // closed once shown, by clicking away as much as by Confirm, it's been seen
+            if (!a_open && visible && !Settings::values.tutorialSeen) {
+                Settings::values.tutorialSeen = true;
+                Settings::Save();
+            }
             visible = a_open;
         }
 
@@ -192,21 +201,26 @@ namespace
             return FUCK::Scale(POPUP_WIDTH, 0.0f);
         }
 
+        // centred by the size it fits itself to. FUCK places a window that can't be moved here every frame
+        ImVec2 GetDefaultPos() const override
+        {
+            const auto screen = FUCK::GetDisplaySize();
+            return ImVec2((screen.x - fittedSize.x) * 0.5f, (screen.y - fittedSize.y) * 0.5f);
+        }
+
+        // FUCK asks for these whenever it checks its windows, not only before drawing this one, so nothing's set here. closed by clicking
+        // anywhere else
         FUCK::WindowFlags GetFlags() const override
         {
-            // FUCK queries flags before BeginWindow, so place the auto-sized window by its
-            // centre on that same frame, rather than moving it afterwards
-            const auto screen = FUCK::GetDisplaySize();
-            FUCK::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            return FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kNoResize |
-                   FUCK::WindowFlags::kNoMove | FUCK::WindowFlags::kCustomPosition | FUCK::WindowFlags::kExtendBorder | FUCK::WindowFlags::kAutoResize;
+            return FUCK::WindowFlags::kNoDecoration | FUCK::WindowFlags::kNoResize | FUCK::WindowFlags::kNoMove | FUCK::WindowFlags::kExtendBorder |
+                   FUCK::WindowFlags::kAutoResize | FUCK::WindowFlags::kCloseOnClickOutside;
         }
 
         bool OnAsyncInput(const void* a_events) override
         {
             for (const auto key : CLOSE_KEYS) {
                 if (FUCK::IsInputPressed(a_events, key)) {
-                    Acknowledge();
+                    SetOpen(false);
                     return true;
                 }
             }
@@ -215,16 +229,8 @@ namespace
         }
 
     private:
-        void Acknowledge()
-        {
-            if (!Settings::values.tutorialSeen) {
-                Settings::values.tutorialSeen = true;
-                Settings::Save();
-            }
-            SetOpen(false);
-        }
-
         std::atomic_bool visible = false;
+        ImVec2 fittedSize{ 0.0f, 0.0f };
     };
 
     // FUCK calls OnClose when the page is left or the menu shuts, the controls box goes with it
@@ -239,35 +245,38 @@ namespace
         }
     };
 
-    // FUCK's offsets on the framing, as right, forward and up, while a menu's open. then the field of view framed menus open at, which a
-    // framed one shows at once
-    void PositionSliders(MenuCamera* camera)
+    // the field of view framed menus open at, which a framed one open shows at once
+    void StartFovSlider(MenuCamera* camera)
     {
-        constexpr float RANGE   = 200.0f;  // game units
         constexpr float FOV_MIN = 20.0f;
         constexpr float FOV_MAX = 120.0f;
 
-        FUCK::CameraOffsets offsets;
-        const bool open = camera->HasCamera() && FUCK::GetCameraOffsets(camera, offsets);
-
-        bool changed = false;
-        if (open) {
-            changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -RANGE, RANGE, "%.0f");
-            changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, RANGE, -RANGE, "%.0f");
-            changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -RANGE, RANGE, "%.0f");
-        } else {
-            FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
-        }
-
         if (FUCK::SliderFloat("$SPII_StartFov"_T, &Settings::values.startFov, FOV_MIN, FOV_MAX, "%.0f")) {
             Settings::Save();
-            if (open && FUCK::IsCameraBodyFramed(camera)) {
+            FUCK::CameraOffsets offsets;
+            if (camera->HasCamera() && FUCK::IsCameraBodyFramed(camera) && FUCK::GetCameraOffsets(camera, offsets)) {
                 offsets.fov = Settings::values.startFov;
-                changed = true;
+                FUCK::SetCameraOffsets(camera, offsets);
             }
         }
         FUCK::SetTooltip("$SPII_StartFovTT"_T);
+    }
 
+    // FUCK's offsets on the framing, as right, forward and up, while a menu's open
+    void PositionSliders(MenuCamera* camera)
+    {
+        constexpr float RANGE = 200.0f;  // game units
+
+        FUCK::CameraOffsets offsets;
+        if (!camera->HasCamera() || !FUCK::GetCameraOffsets(camera, offsets)) {
+            FUCK::TextDisabledWrapped("%s", "$SPII_SlidersClosed"_T);
+            return;
+        }
+
+        bool changed = false;
+        changed |= FUCK::SliderFloat("$SPII_SliderX"_T, &offsets.translate.x, -RANGE, RANGE, "%.0f");
+        changed |= FUCK::SliderFloat("$SPII_SliderY"_T, &offsets.translate.y, RANGE, -RANGE, "%.0f");
+        changed |= FUCK::SliderFloat("$SPII_SliderZ"_T, &offsets.translate.z, -RANGE, RANGE, "%.0f");
         if (changed) {
             FUCK::SetCameraOffsets(camera, offsets);
         }
@@ -323,6 +332,9 @@ namespace
         FUCK::Unindent();
     }
 
+    void DrawSettingsTab();
+    void DrawOtherTab();
+
     void DrawSettings()
     {
         auto& values = Settings::values;
@@ -336,10 +348,64 @@ namespace
         if (toggled) {
             Settings::Save();
             EventProcessor::GetSingleton()->ApplyLiveSettings();
+            MenuCamera::GetSingleton()->ApplyItemHiding();
         }
 
         FUCK::Spacing();
 
+        if (FUCK::BeginTabBar("##Tabs")) {
+            if (FUCK::BeginTabItem("$SPII_TabSettings"_T)) {
+                DrawSettingsTab();
+                FUCK::EndTabItem();
+            }
+            if (FUCK::BeginTabItem("$SPII_TabOther"_T)) {
+                DrawOtherTab();
+                FUCK::EndTabItem();
+            }
+            FUCK::EndTabBar();
+        }
+    }
+
+    // which menus show someone, taking effect the next time one opens, and the camera's speeds
+    void DrawOtherTab()
+    {
+        auto& values = Settings::values;
+        if (BeginCheckboxes("##Menus")) {
+            FUCK::TableNextColumn();
+            BeginSection("$SPII_Menus"_T);
+            Checkbox("$SPII_ShowInventory"_T, values.showInventory, "$SPII_ShowInventoryTT"_T);
+            Checkbox("$SPII_ShowMagic"_T,     values.showMagic,     "$SPII_ShowMagicTT"_T);
+            Checkbox("$SPII_ShowCrafting"_T,  values.showCrafting,  "$SPII_ShowCraftingTT"_T);
+            Checkbox("$SPII_ShowBarter"_T,    values.showBarter,    "$SPII_ShowBarterTT"_T);
+            FUCK::Indent();
+            FUCK::BeginDisabled(!values.showBarter);
+            Checkbox("$SPII_ShowMerchant"_T,  values.showMerchant,  "$SPII_ShowMerchantTT"_T);
+            FUCK::EndDisabled();
+            FUCK::Unindent();
+            EndSection();
+
+            BeginSection("$SPII_Advanced"_T);
+            if (FUCK::CollapsingHeader("$SPII_CameraFeel"_T)) {
+                FUCK::Indent();
+                FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
+                FUCK::Unindent();
+            }
+            EndSection();
+
+            FUCK::TableNextColumn();
+            BeginSection("$SPII_Containers"_T);
+            Checkbox("$SPII_ShowContainers"_T, values.showContainers, "$SPII_ShowContainersTT"_T);
+            Checkbox("$SPII_ShowFollowers"_T,  values.showFollowers,  "$SPII_ShowFollowersTT"_T);
+            Checkbox("$SPII_ShowPickpocket"_T, values.showPickpocket, "$SPII_ShowPickpocketTT"_T);
+            EndSection();
+
+            FUCK::EndTable();
+        }
+    }
+
+    void DrawSettingsTab()
+    {
+        auto& values = Settings::values;
         auto* camera = MenuCamera::GetSingleton();
         if (BeginCheckboxes("##Settings")) {
             FUCK::TableNextColumn();
@@ -360,26 +426,15 @@ namespace
             FUCK::SetTooltip("$SPII_FrameShiftTT"_T);
             EndSection();
 
-            FUCK::TableNextColumn();
-            BeginSection("$SPII_Camera"_T);
-            Checkbox("$SPII_UpperBody"_T,      values.upperBody,      "$SPII_UpperBodyTT"_T);
-            Checkbox("$SPII_TurnCharacter"_T,  values.turnCharacter,  "$SPII_TurnCharacterTT"_T);
-            Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
-
-            FUCK::Indent();
-            FUCK::BeginDisabled(!values.rememberCamera);
-            Checkbox("$SPII_RememberFacing"_T, values.rememberFacing, "$SPII_RememberFacingTT"_T);
-            FUCK::EndDisabled();
-            FUCK::Unindent();
+            BeginSection("$SPII_Adjust"_T);
+            StartFovSlider(camera);
+            if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
+                FUCK::Indent();
+                PositionSliders(camera);
+                FUCK::Unindent();
+            }
             EndSection();
 
-            FUCK::EndTable();
-        }
-
-        FUCK::Spacing();
-
-        if (BeginCheckboxes("##Controls")) {
-            FUCK::TableNextColumn();
             BeginSection("$SPII_Controls"_T);
             Checkbox("$SPII_CameraControls"_T, values.cameraControls, "$SPII_CameraControlsTT"_T);
             if (FUCK::Button("$SPII_ShowControls"_T)) {
@@ -389,50 +444,6 @@ namespace
             if (values.cameraControls) {
                 FUCK::SameLine();
                 FUCK::DrawCameraHelpMarker(HELP_FLAGS);
-            }
-            EndSection();
-
-            BeginSection("$SPII_Items"_T);
-            Checkbox("$SPII_AutoAdjust"_T, ItemDisplay::AutoAdjustSetting(), "$SPII_AutoAdjustTT"_T);
-            static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
-            if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
-                Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
-            }
-            // these are set by Auto-Adjustment while it places them
-            if (FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
-                FUCK::Indent();
-                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
-                ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
-                FUCK::EndDisabled();
-                FUCK::Unindent();
-            }
-            if (FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
-                FUCK::Indent();
-                FUCK::BeginDisabled(ItemDisplay::AutoAdjustSetting());
-                ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
-                FUCK::Separator();
-                const ImVec2 screen = FUCK::GetDisplaySize();
-                const float  across = 720.0f * (screen.y > 0.0f ? screen.x / screen.y : 16.0f / 9.0f);
-                if (FUCK::DragFloat("$SPII_BenchLabelX"_T, &values.benchLabelX, 1.0f, -across, across, "%.0f")) {
-                    Settings::Save();
-                }
-                FUCK::SetTooltip("$SPII_BenchLabelXTT"_T);
-                FUCK::EndDisabled();
-                FUCK::Unindent();
-            }
-            EndSection();
-
-            FUCK::TableNextColumn();
-            BeginSection("$SPII_Adjust"_T);
-            if (FUCK::CollapsingHeader("$SPII_Position"_T)) {
-                FUCK::Indent();
-                PositionSliders(camera);
-                FUCK::Unindent();
-            }
-            if (FUCK::CollapsingHeader("$SPII_Advanced"_T)) {
-                FUCK::Indent();
-                FUCK::DrawCameraSettings(FUCK::CameraSettingsFlags::kSpeeds);
-                FUCK::Unindent();
             }
             EndSection();
 
@@ -452,8 +463,53 @@ namespace
                 camera->ApplyAnimation();
                 camera->ApplyFraming();
                 camera->ResetCamera();
+                camera->ApplyItemHiding();
             }
             FUCK::SetTooltip("$SPII_ResetDefaultsTT"_T);
+            EndSection();
+
+            FUCK::TableNextColumn();
+            BeginSection("$SPII_Camera"_T);
+            Checkbox("$SPII_UpperBody"_T,      values.upperBody,      "$SPII_UpperBodyTT"_T);
+            Checkbox("$SPII_TurnCharacter"_T,  values.turnCharacter,  "$SPII_TurnCharacterTT"_T);
+            Checkbox("$SPII_RememberCamera"_T, values.rememberCamera, "$SPII_RememberCameraTT"_T);
+
+            FUCK::Indent();
+            FUCK::BeginDisabled(!values.rememberCamera);
+            Checkbox("$SPII_RememberFacing"_T, values.rememberFacing, "$SPII_RememberFacingTT"_T);
+            FUCK::EndDisabled();
+            FUCK::Unindent();
+            EndSection();
+
+            BeginSection("$SPII_Items"_T);
+            if (Checkbox("$SPII_HideItemCard"_T, values.hideItemCard, "$SPII_HideItemCardTT"_T) |
+                Checkbox("$SPII_HideItemPreview"_T, values.hideItemPreview, "$SPII_HideItemPreviewTT"_T)) {
+                camera->ApplyItemHiding();
+            }
+            Checkbox("$SPII_AutoAdjust"_T, ItemDisplay::AutoAdjustSetting(), "$SPII_AutoAdjustTT"_T);
+            static const bool apparelPreview = GetModuleHandleW(L"ApparelPreview.dll") != nullptr;
+            if (apparelPreview && Settings::CanHideApparelPreviewItems()) {
+                Checkbox("$SPII_HideApparelPreviewItems"_T, values.hideAppPrevItems, "$SPII_HideApparelPreviewItemsTT"_T);
+            }
+            // only with Auto-Adjustment off, as it sets these while it places them, and not for what's hidden
+            const bool manual = !ItemDisplay::AutoAdjustSetting();
+            if (manual && !values.hideItemPreview && FUCK::CollapsingHeader("$SPII_ItemPreview"_T)) {
+                FUCK::Indent();
+                ItemSliders("ItemPreview", values.itemPreviewX, values.itemPreviewY, values.itemPreviewScale, "$SPII_ItemPreviewTT"_T);
+                FUCK::Unindent();
+            }
+            if (manual && !values.hideItemCard && FUCK::CollapsingHeader("$SPII_ItemCard"_T)) {
+                FUCK::Indent();
+                ItemSliders("ItemCard", values.itemCardX, values.itemCardY, values.itemCardScale, "$SPII_ItemCardTT"_T);
+                FUCK::Separator();
+                const ImVec2 screen = FUCK::GetDisplaySize();
+                const float  across = 720.0f * (screen.y > 0.0f ? screen.x / screen.y : 16.0f / 9.0f);
+                if (FUCK::DragFloat("$SPII_BenchLabelX"_T, &values.benchLabelX, 1.0f, -across, across, "%.0f")) {
+                    Settings::Save();
+                }
+                FUCK::SetTooltip("$SPII_BenchLabelXTT"_T);
+                FUCK::Unindent();
+            }
             EndSection();
 
             FUCK::EndTable();

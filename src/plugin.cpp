@@ -13,6 +13,7 @@ namespace
             // FUCK first, as the settings and translations come through it
             SettingsUI::Register();
             Settings::Load();
+            MenuCamera::GetSingleton()->ApplyItemHiding();
             MenuCamera::InstallHooks();
             ViewSwitchFix::Install();
             EventProcessor::GetSingleton()->Register();

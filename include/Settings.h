@@ -19,6 +19,16 @@ namespace Settings
         bool cameraControls    = true;
         bool tutorialSeen      = false;
 
+        // the menus your character's shown in
+        bool showInventory     = true;
+        bool showMagic         = true;
+        bool showContainers    = true;  // chests and bodies
+        bool showFollowers     = true;  // a follower's inventory, which shows them
+        bool showPickpocket    = true;
+        bool showBarter        = true;
+        bool showMerchant      = true;  // in barter, the merchant rather than the player
+        bool showCrafting      = true;
+
         // the item card and 3D item preview, in the movie's pixels (positive right and up) and as a scale, 0 and 1 leaving them as they are
         float itemCardX        = 0.0f;
         float itemCardY        = 0.0f;
@@ -40,6 +50,10 @@ namespace Settings
 
         // with Apparel Preview, the card and 3D item are hidden while a piece is previewed on the player
         bool hideAppPrevItems  = false;
+
+        // the item card and 3D item kept hidden in every item menu
+        bool hideItemCard      = false;
+        bool hideItemPreview   = false;
 
         // the item menus' card spot as last laid out, on a screen of this shape, for a bench opened before any item menu
         float spotAspect       = 0.0f;
